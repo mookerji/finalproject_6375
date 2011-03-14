@@ -1,0 +1,15 @@
+6.375 Complex Digital Systems 
+Final Project Repository
+Authors: David Greenberg and Bhaskar Mookerji
+
+Repository Contents:
+doc/  Proposal and report deliverables organized by date
+ref/  Reference documents for design and class stuff
+src/  Bluespec implementation
+
+tools/	       	      	
+data/
+fpga/
+scemi/
+sim/
+tools/
