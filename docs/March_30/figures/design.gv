@@ -1,0 +1,47 @@
+digraph design {
+      node [shape = box];
+      
+      subgraph cluster_0{
+      "Instruction Cache" -> "Instruction Fetch\nand Decode Unit";
+      "Instruction Fetch\nand Decode Unit" -> "Instruction Queue";
+      label = "In-Order Issue";
+      }
+      
+      subgraph cluster_1 {
+        "Instruction Queue" -> "Dispatch and Register Renaming";
+        "Reservation\n Station 1" -> "Integer\nALU 1";
+        "Reservation\n Station 2" -> "Integer\nALU 2";
+        "Reservation\n Station 3" -> "Integer\nMultiplier ALU";
+        subgraph cluster_3{"Reservation\n Station 4" -> "Load/Store\n Unit"; rank=same; style=invisible;}
+        label = "Out-of-Order Execute";
+        }
+        
+       subgraph cluster_2 {
+       "Data Cache";
+       "Commit Unit";
+       label = "In-Order Commit";
+       labelloc = b;
+       }
+       
+      "Dispatch and Register Renaming" -> "Reservation\n Station 1";
+      "Dispatch and Register Renaming" -> "Reservation\n Station 2";
+      "Dispatch and Register Renaming" -> "Reservation\n Station 3";
+      "Dispatch and Register Renaming" -> "Reservation\n Station 4";
+      
+      "Integer\nALU 1" -> "Commit Unit";
+      "Integer\nALU 2" -> "Commit Unit";
+      "Integer\nMultiplier ALU" -> "Commit Unit";
+      "Load/Store\n Unit" -> "Commit Unit";
+      
+      "Load/Store\n Unit" -> "Data Cache";
+      "Commit Unit" -> "Branch Predictor";
+      "Commit Unit" -> "Register File";
+      "Commit Unit" -> "Dispatch and Register Renaming";
+      "Register File" -> "Dispatch and Register Renaming";
+      "Branch Predictor" -> "Instruction Fetch\nand Decode Unit";
+      
+      rankdir = TB;
+	  fontsize = 12;
+      overlap = false;
+      model = circuit;
+}

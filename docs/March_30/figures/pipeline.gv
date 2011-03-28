@@ -1,0 +1,14 @@
+digraph pipeline {
+    node [shape = box];
+    rankdir = LR;
+    fontsize = 12;
+    overlap = false;
+    
+    "Instruction\nFetch" -> "Decode\nand Translate";
+    "Decode\nand Translate" -> "Instruction\nQueue";
+    "Instruction\nQueue" -> "Reorder Buffer\nAllocation\nand Register Renaming";
+    "Reorder Buffer\nAllocation\nand Register Renaming" -> "Reorder\nBuffer";
+    "Reorder\nBuffer" -> "Scheduling\n and Dispatch";
+    "Scheduling\n and Dispatch" -> "Execution";
+    "Execution" -> "Data/Cache\nCommit";
+}
