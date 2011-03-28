@@ -4,11 +4,36 @@ digraph pipeline {
     fontsize = 12;
     overlap = false;
     
-    "Instruction\nFetch" -> "Decode\nand Translate";
-    "Decode\nand Translate" -> "Instruction\nQueue";
-    "Instruction\nQueue" -> "Reorder Buffer\nAllocation\nand Register Renaming";
-    "Reorder Buffer\nAllocation\nand Register Renaming" -> "Reorder\nBuffer";
-    "Reorder\nBuffer" -> "Scheduling\n and Dispatch";
-    "Scheduling\n and Dispatch" -> "Execution";
-    "Execution" -> "Data/Cache\nCommit";
+    "Instruction\nQueue" [shape = component];
+    "Reorder\nBuffer" [shape = component];
+    
+    subgraph cluster_0{
+    "Reorder\nBuffer"; 
+    "Data/Cache\nCommit";
+    label = "Commit";
+    labelloc = b;
+    }
+    
+    subgraph cluster_1{
+    "Reorder Buffer\nAllocation\nand\nRegister Renaming";
+    "Scheduling\n and\nDispatch";
+    label = "Out-of-Order Issue";
+    labelloc = b;
+    }
+    
+    subgraph cluster_2{
+    "Decode\nand\nTranslate";
+    "Instruction\nQueue";
+    label = "Decode";
+    labelloc = b;
+    }
+    
+    "Instruction Fetch\n and\nBranch Prediction" -> "Decode\nand\nTranslate";
+    "Decode\nand\nTranslate" -> "Instruction\nQueue";
+    "Instruction\nQueue" -> "Reorder Buffer\nAllocation\nand\nRegister Renaming";
+    "Reorder Buffer\nAllocation\nand\nRegister Renaming" -> "Scheduling\n and\nDispatch";
+    //"Reorder\nBuffer" -> "Scheduling\n and\nDispatch";
+    "Scheduling\n and\nDispatch" -> "Execution";
+    "Execution" -> "Reorder\nBuffer";
+    "Reorder\nBuffer" -> "Data/Cache\nCommit";
 }
