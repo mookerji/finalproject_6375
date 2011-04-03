@@ -30,6 +30,7 @@ typedef struct {
 typedef struct {
   Maybe#(Data) value; //nonvoid when value returns
   Maybe#(RenamedRindx) dst; //where to write this value
+  Epoch epoch;
 } ROBEntry deriving (Bits, Eq);
 
 //holds issued instructions until their operands are ready
