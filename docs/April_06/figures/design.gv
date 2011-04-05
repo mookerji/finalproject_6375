@@ -1,0 +1,56 @@
+digraph design {
+      node [shape = box];
+      
+      v0 [shape = point, width = 0];
+      
+      subgraph cluster_0{
+      "Instruction Cache" -> "Instruction Fetch\nand Decode Unit";
+      "Instruction Fetch\nand Decode Unit" -> "Instruction Queue";
+      label = "In-Order Issue";
+      }
+      
+      
+      subgraph cluster_1 {
+        "Instruction Queue" -> "Dispatch and Register Renaming";
+        "Reservation\n Station 1" -> "Integer\nALU 1" [dir = none];
+        "Reservation\n Station 2" -> "Integer\nALU 2" [dir = none];
+        "Reservation\n Station 3" -> "Integer\nMultiplier ALU" [dir = none];
+        subgraph cluster_3{"Load/Store\nBuffer" -> "Load/Store\n Unit" [dir = none]; 
+                            rank=same; style=invisible;}
+        label = "Out-of-Order Execute";
+        }
+        
+       subgraph cluster_2 {
+       "Data Cache";
+       "Commit Unit";
+       label = "In-Order Commit";
+       labelloc = b;
+       }
+       
+      "Dispatch and Register Renaming" -> "Reservation\n Station 1";
+      "Dispatch and Register Renaming" -> "Reservation\n Station 2";
+      "Dispatch and Register Renaming" -> "Reservation\n Station 3";
+      "Dispatch and Register Renaming" -> "Load/Store\nBuffer";
+      
+      "Integer\nALU 1" -> "Commit Unit";
+      "Integer\nALU 2" -> "Commit Unit";
+      "Integer\nMultiplier ALU" -> "Commit Unit";
+      "Load/Store\n Unit" -> "Commit Unit";
+      
+      "Load/Store\n Unit" -> "Data Cache";
+      "Commit Unit" -> "Branch Predictor";
+      "Commit Unit" -> "Register File";
+      "Commit Unit" -> v0 [dir = none, label = "Common\nData Bus"];
+      v0 -> "Reservation\n Station 1" [dir = none];
+      v0 -> "Reservation\n Station 2" [dir = none];
+      v0 -> "Reservation\n Station 3" [dir = none];
+      v0 -> "Load/Store\nBuffer" [dir = none];
+      
+      "Register File" -> "Dispatch and Register Renaming";
+      "Branch Predictor" -> "Instruction Fetch\nand Decode Unit";
+      
+      rankdir = TB;
+	  fontsize = 12;
+      overlap = false;
+      model = circuit;
+}
