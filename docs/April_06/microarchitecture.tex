@@ -5,6 +5,7 @@
 \usepackage{graphicx}
 \usepackage{listings}
 \usepackage{float}
+\usepackage{}
 
 \floatstyle{plain}
 \newfloat{snippet}{thb}{lop}
@@ -24,9 +25,7 @@
 
 For our 6.375 final project, we are implementing a superscalar processor using Tomasulo's algorithm.
 
-\section{Problem\label{sec:problem}}
-
-\section{High-Level Design}
+\section{Microarchitecture Overview}
 
 \begin{figure}[ht!]
     \centering
@@ -40,9 +39,38 @@ For our 6.375 final project, we are implementing a superscalar processor using T
     \caption{Instruction pipeline. Pipeline stage is labeled in-box, unless superseded by an overbox. A component box indicates component (such as a FIFO) between stages. Not included in this diagram is the reservation stations and load/store buffer in the execution stage.\label{fig:pipeline}}
 \end{figure}
 
+\subsection{New System Types}
 
+\begin{enumerate}
+    \item \textbf{Renamed Register Index}
+    \item \textbf{Reservation Station Entries}
+    \item \textbf{Reorder Buffer Entries}
+\end{enumerate}
 
-\subsection{FPGA Issues}
+\section{Pipeline Stage Interfaces}
 
+\begin{enumerate}
+    \item \textbf{Pipeline Container: Processor}
+    \item \textbf{Instruction Fetch}
+    \item \textbf{Instruction Decode and Dispatch}
+    \item \textbf{Execute}
+    \item \textbf{Writeback and Commit}
+\end{enumerate}
+
+\section{Architectural Interfaces}
+
+\begin{enumerate}
+    \item \textbf{Issue and Dispatch Units}
+    \item \textbf{Reservation Stations}
+    \item \textbf{Common Data Bus}
+    \item \textbf{Reorder Buffer}
+    \item \textbf{Branch Predictor}
+\end{enumerate}
+    
+\section{Goals and Testing Strategy}
+
+\subsection{Functional Correctness}
+\subsection{FPGA Synthesis}
+\subsection{Performance}
 
  \end{document}
