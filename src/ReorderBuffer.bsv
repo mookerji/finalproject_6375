@@ -33,7 +33,7 @@ module mkReorderBuffer(ROB#(robsize));
   endmethod
 
   //initialize the reorder buffer's tail and return its key
-  method ActionValue#(Bit#(TLog#(robsize))) reserve(ROBEntry robEntry) if (!isFullFn);
+  method ActionValue#(Bit#(TLog#(robsize))) reserve(ROBEntry robEntry) if (!isFullFn());
     let tag = addPtr;
     entries[tag] <= tagged Valid robEntry;
     addPtr <= tag + 1;
