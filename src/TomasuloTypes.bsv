@@ -1,4 +1,8 @@
-typedef Rindx ROBTag;
+//----------------------------------------------------------------------
+// Basic instruction type
+//----------------------------------------------------------------------
+
+import ProcTypes::*;
 
 typedef union tagged {
 		      void Valid;
@@ -16,16 +20,20 @@ typedef union tagged {
     Data Value; // ugh
 } Operand deriving (Bits, Eq);
 
+
+typedef Bit#(4) ROBTag;
+
 typedef struct {
-		OpCode op;
+		InstrExt op;
 		ROBTag tag;
-		Bool full;		
+		Bool full;
 		Operand op1;
 		Operand op2;
 		} RSEntry deriving (Bits, Eq);
 
 typedef struct {
 		Maybe#(Data) data;
+        Maybe#(Addr) mispredict;
 		Rindx dest;
 		Epoch epoch;
 		} ROBEntry deriving (Bits, Eq);
@@ -34,20 +42,7 @@ typedef struct {
 		Maybe#(Data) data;
 		ROBTag tag;
 		Epoch epoch;
-		} CDBPacket deriving (Bits, Eq);
-		
-// not used
-typedef union tagged {
-		Data Imm;
-		Rindx Indx;
-		} InstrVar deriving (Bits, Eq);		
-		
-// not used		
-typedef enum {
-  ADD, SUBU, SLT,
-  SLTU, SLL, SRL, SRA,
-  AND, OR, XOR, NOR
-} Op_Exec deriving(Eq,Bits);
+		} CDBPacket deriving (Bits, Eq);	
 
 typedef union tagged
 {
