@@ -33,7 +33,7 @@ typedef struct {
 
 typedef struct {
         Maybe#(Data) data;
-        Maybe#(Addr) mispredict;
+        Maybe#(Tuple2(Addr,Addr)) mispredict;
         Rindx dest;
         Epoch epoch;
         } ROBEntry deriving (Bits, Eq);
@@ -56,6 +56,7 @@ typedef union tagged
   struct { } AND;
   struct { } OR;
   struct { } XOR;
+  struct { } NOR;
   struct { } LUI;
 
   struct { } SLL;
@@ -172,7 +173,7 @@ function Maybe#(Rindx) instr_dest(Instr inst);
     endcase
 endfunction     
 
-function OpCode get_opcode(Instr inst) = instrBits[ 31 : 26];
+//function OpCode get_opcode(Instr inst) = instrBits[ 31 : 26];
 
 //-----------------------------------------------------------
 // Helper functions
@@ -189,8 +190,3 @@ endfunction
 function Bit#(32) rshft( Bit#(32) val );
     return zeroExtend(val[4:0]);
 endfunction
-
-// Some abbreviations
-let sext = signExtend;
-let zext = zeroExtend;
-let sra  = signedShiftRight;
