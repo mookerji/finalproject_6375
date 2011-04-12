@@ -5,9 +5,9 @@
 import ProcTypes::*;
 
 typedef union tagged {
-		      void Valid;
-		      ROBTag Tag;
-		      } RenameEntry deriving (Bits, Eq);
+              void Valid;
+              ROBTag Tag;
+              } RenameEntry deriving (Bits, Eq);
 
 typedef Bit#(6) OpCode;
 
@@ -24,25 +24,25 @@ typedef union tagged {
 typedef Bit#(4) ROBTag;
 
 typedef struct {
-		InstrExt op;
-		ROBTag tag;
-		Bool full;
-		Operand op1;
-		Operand op2;
-		} RSEntry deriving (Bits, Eq);
+        InstrExt op;
+        ROBTag tag;
+        Bool full;
+        Operand op1;
+        Operand op2;
+        } RSEntry deriving (Bits, Eq);
 
 typedef struct {
-		Maybe#(Data) data;
+        Maybe#(Data) data;
         Maybe#(Addr) mispredict;
-		Rindx dest;
-		Epoch epoch;
-		} ROBEntry deriving (Bits, Eq);
+        Rindx dest;
+        Epoch epoch;
+        } ROBEntry deriving (Bits, Eq);
 
 typedef struct {
-		Maybe#(Data) data;
-		ROBTag tag;
-		Epoch epoch;
-		} CDBPacket deriving (Bits, Eq);	
+        Maybe#(Data) data;
+        ROBTag tag;
+        Epoch epoch;
+        } CDBPacket deriving (Bits, Eq);    
 
 typedef union tagged
 {
@@ -82,16 +82,16 @@ typedef union tagged
 } InstrExt deriving (Bits, Eq);
 
 typedef struct {
-	InstrExt  op;
-	Data      op1;
- 	Data      op2;
- 	ROBTag    tag;
+    InstrExt  op;
+    Data      op1;
+    Data      op2;
+    ROBTag    tag;
 } ALUReq deriving (Eq, Bits);
 
 typedef struct {
   Data   ans;
   ROBTag tag;
-} ALUResp deriving(Eq,Bits);				
+} ALUResp deriving(Eq,Bits);                
 
 // operation types/classes
 typedef enum {ALU_OP, MEM_OP, JB_OP} Op_type deriving(Eq);
@@ -136,41 +136,41 @@ function Op_type instr_type( Instr inst );
         tagged MTC0  .it : return ALU_OP;
         tagged ILLEGAL   : return ?;
         default          : return ?;
-	endcase
-endfunction	
+    endcase
+endfunction 
 
 // return instruction destination
 function Maybe#(Rindx) instr_dest(Instr inst);
-	case ( inst ) matches
-		tagged LW    .it :        return Valid (it.rdst);
-		tagged ADDIU .it :        return Valid (it.rdst);
-		tagged SLTI  .it :        return Valid (it.rdst);
-		tagged SLTIU .it :        return Valid (it.rdst);
-		tagged ANDI  .it :        return Valid (it.rdst);
-		tagged ORI   .it :        return Valid (it.rdst);
-		tagged XORI  .it :        return Valid (it.rdst);
-		tagged LUI   .it :        return Valid (it.rdst);
-		tagged SLL   .it :        return Valid (it.rdst);
-		tagged SRL   .it :        return Valid (it.rdst);
-		tagged SRA   .it :        return Valid (it.rdst);
-		tagged SLLV  .it :        return Valid (it.rdst);
-		tagged SRLV  .it :        return Valid (it.rdst);
-		tagged SRAV  .it :        return Valid (it.rdst);
-		tagged ADDU  .it :        return Valid (it.rdst);
-		tagged SUBU  .it :        return Valid (it.rdst);
-		tagged AND   .it :        return Valid (it.rdst);
-		tagged OR    .it :        return Valid (it.rdst);
-		tagged XOR   .it :        return Valid (it.rdst);
-		tagged NOR   .it :        return Valid (it.rdst);
-		tagged SLT   .it :        return Valid (it.rdst);
-		tagged SLTU  .it :        return Valid (it.rdst);
-		tagged JAL   .it :        return Valid (31);
-		tagged JALR  .it :        return Valid (it.rdst);
-		tagged MFC0  .it :        return Valid (it.rdst);
-		tagged MTC0  .it :        return Valid (it.cop0dst);
-		default :                 return Invalid;
-	endcase
-endfunction		
+    case ( inst ) matches
+        tagged LW    .it :        return Valid (it.rdst);
+        tagged ADDIU .it :        return Valid (it.rdst);
+        tagged SLTI  .it :        return Valid (it.rdst);
+        tagged SLTIU .it :        return Valid (it.rdst);
+        tagged ANDI  .it :        return Valid (it.rdst);
+        tagged ORI   .it :        return Valid (it.rdst);
+        tagged XORI  .it :        return Valid (it.rdst);
+        tagged LUI   .it :        return Valid (it.rdst);
+        tagged SLL   .it :        return Valid (it.rdst);
+        tagged SRL   .it :        return Valid (it.rdst);
+        tagged SRA   .it :        return Valid (it.rdst);
+        tagged SLLV  .it :        return Valid (it.rdst);
+        tagged SRLV  .it :        return Valid (it.rdst);
+        tagged SRAV  .it :        return Valid (it.rdst);
+        tagged ADDU  .it :        return Valid (it.rdst);
+        tagged SUBU  .it :        return Valid (it.rdst);
+        tagged AND   .it :        return Valid (it.rdst);
+        tagged OR    .it :        return Valid (it.rdst);
+        tagged XOR   .it :        return Valid (it.rdst);
+        tagged NOR   .it :        return Valid (it.rdst);
+        tagged SLT   .it :        return Valid (it.rdst);
+        tagged SLTU  .it :        return Valid (it.rdst);
+        tagged JAL   .it :        return Valid (31);
+        tagged JALR  .it :        return Valid (it.rdst);
+        tagged MFC0  .it :        return Valid (it.rdst);
+        tagged MTC0  .it :        return Valid (it.cop0dst);
+        default :                 return Invalid;
+    endcase
+endfunction     
 
 function OpCode get_opcode(Instr inst) = instrBits[ 31 : 26];
 

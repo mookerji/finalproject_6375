@@ -9,27 +9,27 @@ import Trace::*;
 import TomasuloTypes::*;
 
 interface ALU;
-	interface Server#(ALUReq, ALUResp) proc_server;
+    interface Server#(ALUReq, ALUResp) proc_server;
 endinterface
 
 (* synthesize *)
 module mkALU( ALU );
 
-	FIFOF#(ALUReq)   reqQ  <- mkFIFOF();
-	FIFOF#(ALUResp) respQ <- mkBypassFIFOF();
+    FIFOF#(ALUReq)   reqQ  <- mkFIFOF();
+    FIFOF#(ALUResp) respQ <- mkBypassFIFOF();
 
-	rule run;
-	    traceTiny("mkProc", "mkALU_run","E");
-	    
-	    let sra  = signedShiftRight;
-	    
-	    reqQ.deq();
-		let req = reqQ.first();
+    rule run;
+        traceTiny("mkProc", "mkALU_run","E");
+        
+        let sra  = signedShiftRight;
+        
+        reqQ.deq();
+        let req = reqQ.first();
 
-		let x = req.op1;
-		let y = req.op2;
+        let x = req.op1;
+        let y = req.op2;
 
-		Data ans = ?;
+        Data ans = ?;
 
         // *** check all of this    
         //  1. ensure arithmetic ops are done correctly
@@ -49,13 +49,13 @@ module mkALU( ALU );
         endcase
 
         let resp = ALUResp{ans:ans, tag:req.tag};
-    	respQ.enq(resp);
-  	endrule
+        respQ.enq(resp);
+    endrule
 
-	interface Server proc_server;
-		interface Put request  = tracePut("reqTiny", fifoToPut(reqQ));
-		interface Get response = traceGet("respTiny", fifofToGet(respQ));
-	endinterface
+    interface Server proc_server;
+        interface Put request  = tracePut("reqTiny", fifoToPut(reqQ));
+        interface Get response = traceGet("respTiny", fifofToGet(respQ));
+    endinterface
 endmodule
 
 module mkALUTest (Empty);
