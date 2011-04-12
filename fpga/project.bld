@@ -1,0 +1,38 @@
+[DEFAULT]
+default-targets:     xupv5_dut tb
+bsc-compile-options: -aggressive-conditions -keep-fires -opt-undetermined-vals -unspecified-to 0
+bsc-link-options:    -keep-fires
+
+[common]
+hide-target
+bsv-source-directories:  ../src ../scemi
+verilog-directory:     vlog_dut
+binary-directory:      bdir_dut
+simulation-directory:  simdir_dut
+info-directory:        info_dut
+altera-directory:      quartus
+xilinx-directory:      xilinx
+scemi-parameters-file: scemi.params
+top-module:            mkBridge
+top-file:              ../scemi/Bridge.bsv
+
+[dut]
+hide-target
+extends-target: common
+
+[xupv5_dut]
+extends-target: dut
+build-for:      xupv5
+scemi-type:     PCIE_VIRTEX5
+scemi-parameters-file: scemi.params
+xilinx-map-options: -detail
+
+[tb]
+extends-target: common
+scemi-tb
+build-for: c++
+c++-header-directory: tbinclude
+c++-header-aliases
+c++-files: ../tb/TestBench.cpp ../tb/vmh-memory.cpp ../tb/vmh-utils.cpp ../tb/ResetXactor.cpp
+exe-file: tb
+

@@ -1,0 +1,12 @@
+#!/bin/sh
+#
+# Run each of the benchmarks on FPGA and report their result and IPC.
+# You should run this from the fpga directory with the testbench
+# already built and the FPGA already programmed.
+
+for x in ../data/*.smips.vmh
+do
+    echo -n $x...
+    ./tb $x
+done
+

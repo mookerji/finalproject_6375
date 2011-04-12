@@ -1,0 +1,19 @@
+#!/bin/sh
+#
+# Run each of the benchmarks in simulation and report their result and IPC.
+# You should run this from the sim directory with the dut and testbench
+# already built.
+
+# By default we use bsim_dut as the simulation. This can be overridden by
+# specifying simulation executable as the first command line argument.
+dut=${1:-bsim_dut}
+
+for x in ../data/*.smips.vmh
+do
+    ./$dut 2> `basename $x .smips.vmh`.trace &
+    echo -n $x...
+    sleep 1
+    ./tb $x
+    sleep 1
+done
+

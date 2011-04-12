@@ -1,0 +1,8 @@
+#!/bin/sh
+#
+# Program the FPGA
+# This should be run from the fpga/ directory
+
+cd xilinx && impact -batch mkBridge_jtag.cmd
+fixpci
+
