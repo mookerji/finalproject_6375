@@ -17,7 +17,7 @@ typedef Bit#(6) OpCode;
 //      copies of entries from 
 typedef union tagged {
     ROBTag Tag;
-    Data Value; // ugh
+    Data Imm; // ugh
 } Operand deriving (Bits, Eq);
 
 
@@ -33,7 +33,7 @@ typedef struct {
 
 typedef struct {
         Maybe#(Data) data;
-        Maybe#(Tuple2(Addr,Addr)) mispredict;
+        Maybe#(Tuple2#(Addr,Addr)) mispredict;
         Rindx dest;
         Epoch epoch;
         } ROBEntry deriving (Bits, Eq);
@@ -90,7 +90,7 @@ typedef struct {
 } ALUReq deriving (Eq, Bits);
 
 typedef struct {
-  Data   ans;
+  Data   data;
   ROBTag tag;
 } ALUResp deriving(Eq,Bits);                
 

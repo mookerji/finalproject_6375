@@ -7,6 +7,7 @@ interface ROB#(numeric type robsize);
   method Action update(Bit#(TLog#(robsize)) tag, ROBEntry robEntry);
   method Maybe#(ROBEntry) get(Bit#(TLog#(robsize)) tag);
   method ROBEntry getLast();
+  method Bit#(TLog#(robsize)) getLastTag();
   method Action complete();
   method Bool isEmpty();
   method Bool isFull();
@@ -51,6 +52,10 @@ module mkReorderBuffer(ROB#(robsize));
 
   method ROBEntry getLast() if (isValid(entries[removePtr]));
     return fromMaybe(defaultEntry, entries[removePtr]);
+  endmethod
+
+  method Bit#(TLog#(robsize)) getLastTag() if (isValid(entries[removePtr]));
+    return removePtr;
   endmethod
 
   method Action complete() if (isValid(entries[removePtr]));

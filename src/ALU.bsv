@@ -54,7 +54,7 @@ module mkALU( ALU );
             default: $display("[ERROR] ALU: invalid Op_Exec op [%x]!", req.op);
         endcase
 
-        let resp = ALUResp{ans:ans, tag:req.tag};
+        let resp = ALUResp{data:ans, tag:req.tag};
         respQ.enq(resp);
     endrule
 

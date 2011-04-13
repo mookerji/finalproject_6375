@@ -23,7 +23,6 @@
 import Connectable::*;
 import GetPut::*;
 import ClientServer::*;
-import RegFile::*;
 import FIFO::*;
 import FIFOF::*;
 import RWire::*;
@@ -39,6 +38,8 @@ import TomasuloTypes::*;
 import ReorderBuffer::*;
 import CommonDataBus::*;
 import BranchPredictor::*;
+import RFile::*;
+import ReservationStation::*;
 
 interface ProcStats;
     interface Get#(Stat) num_cycles;
@@ -68,78 +69,6 @@ endinterface
 
 typedef enum { PCgen, Decode_Issue, Execute, Completion, Writeback } Stage deriving(Eq,Bits);
 
-//-----------------------------------------------------------
-// Register file module
-//-----------------------------------------------------------
-
-interface RFile;
-    method Action   wr( Rindx rindx, Bit#(32) data );
-    method Bit#(32) rd1( Rindx rindx );
-    method Bit#(32) rd2( Rindx rindx );
-endinterface
-
-interface RenameFile;
-    method Action   wr( Rindx rindx, RenameEntry entry );
-    method RenameEntry rd1( Rindx rindx );
-    method RenameEntry rd2( Rindx rindx );
-endinterface
-
-module mkRFile( RFile );
-   
-    RegFile#(Rindx,Bit#(32)) rfile <- mkRegFileWCF(0, 31);
-    RWire#(Rindx) indxWire <- mkRWire();
-    RWire#(Bit#(32)) dataWire <- mkRWire();
-   
-    method Action wr( Rindx rindx, Bit#(32) data );
-        rfile.upd( rindx, data );
-        indxWire.wset(rindx);
-        dataWire.wset(data);
-    endmethod
-   
-    method Bit#(32) rd1( Rindx rindx );
-        if (rindx == 0) return 0;
-        else if (indxWire.wget() matches tagged Valid .indx &&& indx == rindx)
-            return fromMaybe(0, dataWire.wget());
-        else return rfile.sub(rindx);
-    endmethod
-   
-    method Bit#(32) rd2( Rindx rindx );
-        if (rindx == 0) return 0;
-        else if (indxWire.wget() matches tagged Valid .indx &&& indx == rindx)
-            return fromMaybe(0, dataWire.wget());
-        else return rfile.sub(rindx);
-    endmethod
-
-endmodule
-
-// make this polymorphic using RFile 
-module mkRenameFile( RenameFile );
-   
-    RegFile#(Rindx,RenameEntry) rfile <- mkRegFileWCF(0, 31);
-    RWire#(Rindx) indxWire <- mkRWire();
-    RWire#(RenameEntry) dataWire <- mkRWire();
-   
-    method Action wr( Rindx rindx, RenameEntry entry );
-        rfile.upd( rindx, entry );
-        indxWire.wset(rindx);
-        dataWire.wset(entry);
-    endmethod
-   
-    method RenameEntry rd1( Rindx rindx );
-        if (rindx == 0) return tagged Valid;
-        else if (indxWire.wget() matches tagged Valid .indx &&& indx == rindx)
-            return fromMaybe(tagged Valid, dataWire.wget());
-        else return rfile.sub(rindx);
-    endmethod
-   
-    method RenameEntry rd2( Rindx rindx );
-        if (rindx == 0) return tagged Valid;
-        else if (indxWire.wget() matches tagged Valid .indx &&& indx == rindx)
-            return fromMaybe(tagged Valid, dataWire.wget());
-        else return rfile.sub(rindx);
-    endmethod
-
-endmodule
 
 //-----------------------------------------------------------
 // Reference processor
@@ -157,15 +86,16 @@ module  mkProc( Proc );
    
     Reg#(Addr)  realpc    <- mkReg(32'h00001000);
     BranchPredictor#(16) predictor <- mkBranchPredictor();
-    RFile       rf    <- mkRFile;
+    RFile#(Bit#(32))       rf    <- mkRFile(0);
 
     // Tomasulo algorithm data structures
-    FIFO#(RSEntry) alu_rs <- mkFIFO();
-    FIFO#(RSEntry) mem_rs <- mkFIFO();
-    FIFO#(RSEntry) js_rs <- mkFIFO();
+    //TODO: make these fifos the correct datastructure
+    FIFO#(RSEntry) mem_rs <- mkLFIFO();
+    FIFO#(RSEntry) jb_rs <- mkLFIFO();
     CommonDataBus#(CDBPacket, 4) cdb <- mkCDB();
     ROB#(16) rob <- mkReorderBuffer();
-    RenameFile rename <- mkRenameFile();
+    RFile#(RenameEntry) rename <- mkRFile(tagged Valid);
+    ReservationStation alu_rs <- mkReservationStation(cdb);
     
     // plug and play execution unit
     ALU alu_exec <- mkALU();
@@ -211,11 +141,6 @@ module  mkProc( Proc );
     let zext = zeroExtend;
     let sra  = signedShiftRight;
     
-    Instr inst = case ( instRespQ.first() ) matches
-                    tagged LoadResp  .ld : return unpack(ld.data);
-                    tagged StoreResp .st : return ?;
-                endcase;
-
     rule fetch; 
         // no branch prediction
         traceTiny("mkProc", "fetch","F");
@@ -238,20 +163,21 @@ module  mkProc( Proc );
                 // set reservation station entries
                 // if register has valid datam, use it
                 if (rename_reg matches tagged Valid) begin
-                    ret.op1 = tagged Value rf.rd1(src);
+                    ret.op1 = tagged Imm rf.rd1(src);
 
                 // if common data bus has bypassed rob data, use it
                 end else if (rename_reg matches tagged Tag .rob_tag &&& cdb.hasData()) begin   
                     let cdb_data <- cdb.get(0);
                     if (cdb_data.tag == rob_tag) begin
-                        ret.op1 = tagged Value fromMaybe(cdb_data.data);
+                        ret.op1 = tagged Imm fromMaybe(?, cdb_data.data);
                     end 
                     
                 // if the rob has tagged data, use it
                 end else if (rename_reg matches tagged Tag .rob_tag 
                                 &&& isValid(rob.get(rob_tag))) begin
                 // *** rob needs to support multiple reads
-                    ret.op1 = tagged Value rob.get(rob_tag);
+//todo: fix this
+//                    ret.op1 = tagged Imm fromMaybe(?, rob.get(rob_tag));
 
                 // if nowhere has it, invalidate the operand
                 end else if (rename_reg matches tagged Tag .rob_tag) begin
@@ -275,20 +201,21 @@ module  mkProc( Proc );
                 // set reservation station entries
                 // if register has valid datam, use it
                 if (rename_reg matches tagged Valid) begin
-                    ret.op2 = tagged Value rf.rd2(src);
+                    ret.op2 = tagged Imm rf.rd2(src);
 
                 // if common data bus has bypassed rob data, use it
                 end else if (rename_reg matches tagged Tag .rob_tag &&& cdb.hasData()) begin   
                     let cdb_data <- cdb.get(1);
                     if (cdb_data.tag == rob_tag) begin
-                        ret.op2 = tagged Value fromMaybe(cdb_data.data);
+                        ret.op2 = tagged Imm fromMaybe(?, cdb_data.data);
                     end 
                     
                 // if the rob has tagged data, use it
                 end else if (rename_reg matches tagged Tag .rob_tag
                                 &&& isValid(rob.get(rob_tag))) begin
                 // *** rob needs to support multiple reads
-                    ret.op2 = tagged Value rob.get(rob_tag);
+//todo: fix this
+//                    ret.op2 = tagged Imm rob.get(rob_tag);
 
                 // if nowhere has it, invalidate the operand
                 end else if (rename_reg matches tagged Tag .rob_tag) begin
@@ -302,18 +229,21 @@ module  mkProc( Proc );
     
     function RSEntry setRSEntry_imm1(RSEntry entry, Data imm);
         let ret = entry;
-        ret.op1 = tagged Value imm;
+        ret.op1 = tagged Imm imm;
         return ret;
     endfunction
     
     function RSEntry setRSEntry_imm2(RSEntry entry, Data imm);
         let ret = entry;
-        ret.op2 = tagged Value imm;
+        ret.op2 = tagged Imm imm;
         return ret;
     endfunction
     
-    function Bool decode_issue_valid(); 
-        return !rob.isFull() && !(inst matches tagged SW .it);
+    function Bool decode_issue_valid();
+        case (firstInst()) matches
+          tagged SW .it: return False;
+          default: return !rob.isFull();
+        endcase
     endfunction
     
     // this stage decodes instructions, packs them into RSEntries, checks three sources 
@@ -331,10 +261,10 @@ module  mkProc( Proc );
         
         // grab and set reorder buffer entry tag
         // by default, assume second operand is 0.
-        rs_entry.op2 = tagged Value 0;
+        rs_entry.op2 = tagged Imm 0;
         
         // check in three places for register value with setRSEntry_src1 and setRSEntry_src2
-        case ( inst ) matches
+        case ( firstInst() ) matches
 
             // -- Memory Ops ------------------------------------------------
             // Rindx rbase; Rindx {rdst, rsrc}; Simm offset;
@@ -540,9 +470,9 @@ module  mkProc( Proc );
             tagged MFC0  .it : begin
                 rs_entry.op = tagged  MFC0 {};
                 case (it.cop0src)
-                    5'd10 :  rs_entry =  setRSEntry_imm1(bool2bits(cp0_statsEn)); 
-                    5'd20 :  rs_entry =  setRSEntry_imm1(zext(cp0_fromhost));
-                    5'd21 :  rs_entry =  setRSEntry_imm1(zext(cp0_tohost)); 
+                    5'd10 :  rs_entry =  setRSEntry_imm1(rs_entry, zext(pack(cp0_statsEn))); 
+                    5'd20 :  rs_entry =  setRSEntry_imm1(rs_entry, zext(cp0_fromhost));
+                    5'd21 :  rs_entry =  setRSEntry_imm1(rs_entry, zext(cp0_tohost)); 
                     default : $display( " RTL-ERROR : %m decode_issue: Illegal MFC0 cop0src register!" );
                 endcase
             end
@@ -552,8 +482,8 @@ module  mkProc( Proc );
         endcase
         
         // update reservation station by instruction type
-        case (instr_type(inst))
-            ALU_OP: alu_rs.enq(rs_entry);
+        case (instr_type(firstInst()))
+            ALU_OP: alu_rs.put(rs_entry);
             JB_OP:  jb_rs.enq(rs_entry);
             MEM_OP: mem_rs.enq(rs_entry);
             default:
@@ -563,60 +493,42 @@ module  mkProc( Proc );
         // initialize reorder buffer entry
         ROBEntry rob_entry = ?;
         rob_entry.epoch = predictor.currentEpoch();
-        rob_entry.dest = instr_dest(inst);
+        rob_entry.dest = fromMaybe(?, instr_dest(firstInst()));
         // update rename table
-        if (isValid(rob_entry.dest)) begin
+        if (isValid(instr_dest(firstInst()))) begin
             RenameEntry dest_map = tagged Tag rs_entry.tag;
             rename.wr(rob_entry.dest, dest_map);
         end
         
         // update reorder buffer 
-        rob.update(rob_entry, rs_entry.tag); 
+        rob.update(rs_entry.tag, rob_entry); 
     endrule
         
-    // alu reservation station snooping. runs if alu_rs is full and cdb has data
-    rule alu_rs_snoop_cdb (cdb.hasData() && !alu_rs.notFull());
-        let entry = alu_rs.first();
-        let cdb_data = cdb.get(2);
-        
-        // checks to see if either operand has a tag, and if it matches cdb tag
-        if (entry.op1 matches tagged Tag .rob_tag 
-				 &&& (rob_tag == cdb_data.tag) 
-				 && isValid(cdb_data.data)) begin
-            // update alu_rs first operand state
-            alu_rs.deq();
-            entry.op1 = tagged Value cdb_data.data;
-            alu_rs.enq(entry);
-        end else if (entry.op1 matches tagged Tag .rob_tag 
-					  &&& (rob_tag == cdb_data.tag) 
-					  && isValid(cdb_data.data)) begin
-            // update alu_rs second operand state
-            alu_rs.deq();
-            entry.op2 = tagged Value cdb_data.data;
-            alu_rs.enq(entry);
-        end else 
-            $display( " RTL-ERROR : %m alu_rs_snoop_cdb: Invalid data on cdb!" );
-    endrule
-    
-    rule dispatch_alu (!alu_rs.notFull() 
-                        && alu_rs.first().op1 matches tagged Value .op1_val 
-                        &&& alu_rs.first().op2 matches tagged Value .op2_val);
-        alu_rs.deq();
-        let entry = alu_rs.first();
+    rule dispatch_alu;
+        let entry <- alu_rs.getReadyEntry();
         
         // pass the ROB tag through the ALU
+        Data op1_val = ?;
+        Data op2_val = ?;
+        case (entry.op1) matches
+          tagged Imm .x: op1_val = x;
+          tagged Tag .x: $display("Shouldn't happen");
+        endcase
+        case (entry.op2) matches
+          tagged Imm .x: op2_val = x;
+          tagged Tag .x: $display("Shouldn't happen");
+        endcase
         ALUReq req = ALUReq{op:entry.op, op1:op1_val, op2:op2_val, tag:entry.tag};
         aluReqQ.enq(req);
     endrule
     
-    rule dispatch_load (dispatch_mem_valid());
+    rule dispatch_load;
         mem_rs.deq();
         let entry = mem_rs.first();
     endrule
     
-    rule dispatch_branch(!jb_rs.notFull() 
-                    && jb_rs.first().op1 matches tagged Value .op1_val 
-                    &&& jb_rs.first().op2 matches tagged Value .op2_val);
+    rule dispatch_branch(jb_rs.first().op1 matches tagged Imm .op1_val 
+                     &&& jb_rs.first().op2 matches tagged Imm .op2_val);
                     
         jb_rs.deq();
         let entry = jb_rs.first();
@@ -682,7 +594,7 @@ module  mkProc( Proc );
         
         realpc <= next_pc;
         if (next_pc != predictor.confirmPredict(realpc)) begin
-            let rob_entry = rob.get(entry.tag);
+            let rob_entry = fromMaybe(?, rob.get(entry.tag));
             rob_entry.mispredict = tagged Valid tuple2(realpc, next_pc);
             rob.update(entry.tag, rob_entry);
         end
@@ -695,14 +607,13 @@ module  mkProc( Proc );
         aluRespQ.deq();
         
         // generate cdb packet and put on bus
-        CDBPacket cdb_ans = CDBPacket{data:?, tag:ans.tag, epoch:0};
-        cdb_ans.data = tagged Valid ans.data;
+        CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:0};
         cdb.put(cdb_ans);
         
         // update ROB 
-        let rob_entry = fromMaybe(rob.get(tag));
+        let rob_entry = fromMaybe(?, rob.get(ans.tag));
         rob_entry.data = tagged Valid ans.data;
-        rob.update(tag, rob_entry);
+        rob.update(ans.tag, rob_entry);
     endrule
 
     rule purge (rob.getLast().epoch != predictor.currentEpoch());
@@ -713,18 +624,18 @@ module  mkProc( Proc );
         traceTiny("mkProc", "graduate","G");
         
         // update register file with data and update rename
-        let head = rob.getLast();
+        ROBEntry head = rob.getLast();
         if (isValid(head.data)) begin
             rf.wr(head.dest, fromMaybe(0, head.data));
 
 	   // check type for rename
-	   if(rename.rd1(dest) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag())
+	   if(rename.rd1(head.dest) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag())
               rename.wr(head.dest, tagged Valid);
         end
 
         //if mispredict
         if (isValid(head.mispredict)) begin
-            let src, dst = fromMaybe(tuple2(0,0), head.mispredict); 
+            match { .src, .dst } = fromMaybe(tuple2(0,0), head.mispredict); 
             predictor.mispredict(src, dst);
         end
 
