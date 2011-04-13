@@ -260,6 +260,9 @@ module  mkProc( Proc );
         RSEntry rs_entry = ?; 
         
         // grab and set reorder buffer entry tag
+        let defaultEntry = ROBEntry { data:tagged Invalid, mispredict:tagged Invalid, dest:0, epoch:0 };
+        rs_entry.tag <- rob.reserve(defaultEntry);
+        
         // by default, assume second operand is 0.
         rs_entry.op2 = tagged Imm 0;
         
