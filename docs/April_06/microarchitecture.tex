@@ -380,6 +380,13 @@ datatypes are described in greater detail in the next section.
 
     \section{Implementation Status and Testing Plans}
 
+      We have thus far implemented the ALU, the reservation stations, the common data (bypass) bus,
+      the reorder buffer, and all of the system types. The common data bus and the reorder buffer have
+      been unit tested for correctness. The branch predictor and memory subsystem have been ported,
+      and the majority of Tomasulo's algorithm has been implemented. The load/store system must be
+      still be implemented, and branch predictor and operand source search function must be tested.
+      All 1322 lines of code compile without error.
+
     \section{Planned Design Exploration}
     
     Our first goal is to obtain functional out-of-order execution with speculation, and then improve IPC performance by optimizing rule/pipeline concurrency and FIFO choices (as in Lab 6). We will explore architectural parametrization and design choices on the IPC and timing critical path:    
