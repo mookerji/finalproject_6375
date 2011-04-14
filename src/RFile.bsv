@@ -11,7 +11,7 @@ interface RFile#(type t);
     method t rd2( Rindx rindx );
 endinterface
 
-module mkRFile(t defaultValue, RFile#(t) rfifc ) provisos (Bits#(t,__a));
+module mkRFile#(t defaultValue, Bool bypass)(RFile#(t) rfifc ) provisos (Bits#(t,__a));
     RegFile#(Rindx,t) rfile <- mkRegFileWCF(0, 31);
     RWire#(Rindx) indxWire <- mkRWire();
     RWire#(t) dataWire <- mkRWire();
@@ -24,14 +24,14 @@ module mkRFile(t defaultValue, RFile#(t) rfifc ) provisos (Bits#(t,__a));
    
     method t rd1( Rindx rindx );
         if (rindx == 0) return defaultValue;
-        else if (indxWire.wget() matches tagged Valid .indx &&& indx == rindx)
+        else if (indxWire.wget() matches tagged Valid .indx &&& indx == rindx &&& bypass)
             return fromMaybe(defaultValue, dataWire.wget());
         else return rfile.sub(rindx);
     endmethod
    
     method t rd2( Rindx rindx );
         if (rindx == 0) return defaultValue;
-        else if (indxWire.wget() matches tagged Valid .indx &&& indx == rindx)
+        else if (indxWire.wget() matches tagged Valid .indx &&& indx == rindx &&& bypass)
             return fromMaybe(defaultValue, dataWire.wget());
         else return rfile.sub(rindx);
     endmethod

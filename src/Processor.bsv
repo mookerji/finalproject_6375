@@ -86,7 +86,7 @@ module  mkProc( Proc );
    
     Reg#(Addr)  realpc    <- mkReg(32'h00001000);
     BranchPredictor#(16) predictor <- mkBranchPredictor();
-    RFile#(Bit#(32))       rf    <- mkRFile(0);
+    RFile#(Bit#(32))       rf    <- mkRFile(0, True);
 
     // Tomasulo algorithm data structures
     //TODO: make these fifos the correct datastructure
@@ -94,7 +94,7 @@ module  mkProc( Proc );
     FIFO#(RSEntry) jb_rs <- mkLFIFO();
     CommonDataBus#(CDBPacket, 4) cdb <- mkCDB();
     ROB#(16) rob <- mkReorderBuffer();
-    RFile#(RenameEntry) rename <- mkRFile(tagged Valid);
+    RFile#(RenameEntry) rename <- mkRFile(tagged Valid, False);
     ReservationStation alu_rs <- mkReservationStation(cdb);
     
     // plug and play execution unit
