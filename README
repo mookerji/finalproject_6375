@@ -1,14 +1,16 @@
 6.375 Complex Digital Systems 
 Final Project Repository
-Authors: David Greenberg and Bhaskar Mookerji
+Authors: David S. Greenberg and Bhaskar Mookerji
 
 Repository Contents:
-doc/  Proposal and report deliverables organized by date
-ref/  Reference documents for design and class stuff
-src/  Bluespec implementation
-
-tools/	       	      	
-data/
-fpga/
-scemi/
-sim/
+data/      Test routines
+docs/      Proposal and report deliverables organized by date
+           Latest changes made to April_06 directory
+fpga/      FPGA build files
+proto*/    Depricated pre-design interface
+ref/       Reference documents for design and class stuff
+scemi/     SCE-MI source files
+sim/       Bluespec simulator build files
+src/       Bluespec implementation
+tb/        Test bench
+tools/     Miscellaneous tools for debugging traces
