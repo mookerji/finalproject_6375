@@ -26,7 +26,6 @@ typedef Bit#(4) ROBTag;
 typedef struct {
         InstrExt op;
         ROBTag tag;
-        Bool full;
         Operand op1;
         Operand op2;
         } RSEntry deriving (Bits, Eq);

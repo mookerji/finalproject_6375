@@ -145,7 +145,8 @@ module  mkProc( Proc );
         // no branch prediction
         traceTiny("mkProc", "fetch","F");
         traceTiny("mkProc", "pc", realpc);
-        instReqQ.enq( LoadReq{ addr:pc_plus4, tag:0 } );
+        let x <- predictor.predict();
+        instReqQ.enq( LoadReq{ addr:x, tag:predictor.currentEpoch() } );
     endrule
     
     // this function has to be refactored and checked
@@ -492,7 +493,7 @@ module  mkProc( Proc );
         
         // initialize reorder buffer entry
         ROBEntry rob_entry = ?;
-        rob_entry.epoch = predictor.currentEpoch();
+        rob_entry.epoch = predictor.currentEpoch(); //todo: use the epoch for this instruction
         rob_entry.dest = fromMaybe(?, instr_dest(firstInst()));
         // update rename table
         if (isValid(instr_dest(firstInst()))) begin
