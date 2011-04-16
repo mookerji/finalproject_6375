@@ -12,14 +12,20 @@ endinterface
 module mkCDB(CommonDataBus#(t, nlisteners)) provisos (Add#(1,a__,nlisteners), Bits#(t,c__));
   Vector#(nlisteners, Reg#(Bool)) acks <- replicateM(mkReg(False));
   Reg#(Maybe#(t)) data <- mkReg(tagged Invalid);
+  RWire#(t) dataWire <- mkRWire();
 
   function Bool andFn(Bool x, Bool y);
     return x && y;
   endfunction
 
-  rule allAcked(foldr1(andFn, readVReg(acks)));
+  rule allAcked(foldr1(andFn, readVReg(acks)) == True);
     writeVReg(acks, replicate(False));
     data <= tagged Invalid;
+  endrule
+
+  //we persist data when it hasn't been acked
+  rule persist(dataWire.wget() matches tagged Valid .it &&& foldr1(andFn, readVReg(acks)) == False);
+    data <= tagged Valid it;
   endrule
 
   method Action dumpState();
@@ -32,14 +38,19 @@ module mkCDB(CommonDataBus#(t, nlisteners)) provisos (Add#(1,a__,nlisteners), Bi
     return isValid(data);
   endmethod
 
-  method ActionValue#(t) get(Bit#(TLog#(nlisteners)) id) if (isValid(data));
+  method ActionValue#(t) get(Bit#(TLog#(nlisteners)) id) if (isValid(data) || isValid(dataWire.wget()));
     if (acks[id] == True) $display("Cannot ack for an ID twice per bus cycle");
     acks[id] <= True;
-    return fromMaybe(?, data);
+    if (dataWire.wget() matches tagged Valid .it) return it;
+    else if (data matches tagged Valid .it) return it;
+    else begin
+      $display("this shouldn't happen");
+      return ?;
+    end
   endmethod
 
   method Action put(t entry) if (!isValid(data));
-    data <= tagged Valid entry;
+    dataWire.wset(entry);
   endmethod
 endmodule
 
