@@ -84,7 +84,6 @@ module  mkProc( Proc );
 
     // Standard processor state
    
-    Reg#(Addr)  realpc    <- mkReg(32'h00001000);
     BranchPredictor#(16) predictor <- mkBranchPredictor();
     RFile#(Bit#(32))       rf    <- mkRFile(0, True);
     FIFO#(FetchMetaData) pcQ <- mkFIFO();
@@ -136,8 +135,6 @@ module  mkProc( Proc );
         return pcQ.first().pc;
     endfunction
 
-    let pc_plus4 = realpc + 4;
-    
     // Some abbreviations
     let sext = signExtend;
     let zext = zeroExtend;
@@ -146,7 +143,6 @@ module  mkProc( Proc );
     rule fetch; 
         // no branch prediction
         traceTiny("mkProc", "fetch","F");
-        traceTiny("mkProc", "pc", realpc);
         let pc <- predictor.predict();
         let epoch = predictor.currentEpoch();
         pcQ.enq(FetchMetaData { pc: pc, epoch: epoch } );
@@ -446,6 +442,7 @@ module  mkProc( Proc );
         
         // reserve reorder buffer entry
         rs_entry.tag <- rob.reserve(firstInstEpoch(), firstInstPc(), instr_dest(firstInst()));
+        rs_entry.epoch = firstInstEpoch();
         // update reservation station by instruction type
         case (instr_type(firstInst()))
             ALU_OP: alu_rs.put(rs_entry);
@@ -473,83 +470,13 @@ module  mkProc( Proc );
           tagged Imm .x: op2_val = x;
           tagged Tag .x: $display("Shouldn't happen");
         endcase
-        ALUReq req = ALUReq{op:entry.op, op1:op1_val, op2:op2_val, tag:entry.tag};
+        ALUReq req = ALUReq{op:entry.op, op1:op1_val, op2:op2_val, tag:entry.tag, pc: entry.pc, epoch: entry.epoch};
         aluReqQ.enq(req);
     endrule
     
     rule dispatch_load;
         mem_rs.deq();
         let entry = mem_rs.first();
-    endrule
-    
-    rule dispatch_branch(jb_rs.first().op1 matches tagged Imm .op1_val 
-                     &&& jb_rs.first().op2 matches tagged Imm .op2_val);
-                    
-        jb_rs.deq();
-        let entry = jb_rs.first();
-        Addr  next_pc = pc_plus4;
-
-        case (entry.op) matches
-            // -- Branches --------------------------------------------------
-            tagged BLEZ  .it : begin    
-                if ( signedLE( op1_val, 0 ) ) begin
-                    next_pc = pc_plus4 + (op2_val << 2);
-                end
-            end
-            tagged BGTZ  .it : begin
-                if ( signedGT( op1_val, 0 ) ) begin
-                    next_pc = pc_plus4 + (op2_val << 2);
-                end
-            end
-            tagged BLTZ  .it : begin
-                if ( signedLT( op1_val, 0 ) ) begin
-                    next_pc = pc_plus4 + (op2_val << 2);
-                end
-            end
-            tagged BGEZ  .it : begin
-                if ( signedGE( op1_val, 0 ) ) begin
-                    next_pc = pc_plus4 + (op2_val << 2);
-                end
-            end
-
-            tagged BEQ   .it : begin
-                if ( op1_val == op2_val ) begin
-                    next_pc = pc_plus4 + (sext(it.offset) << 2);
-                end
-            end
-            tagged BNE   .it : begin
-                if ( op1_val != op2_val ) begin
-                    next_pc = pc_plus4 + (sext(it.offset) << 2);
-                end
-            end
-
-            // -- Jumps -----------------------------------------------------
-            // Target target;
-            tagged J     .it : begin
-                next_pc = { pc_plus4[31:28], it.target, 2'b0 };
-            end
-            // Rindx rsrc;
-            tagged JR    .it : begin
-                next_pc = op1_val;
-            end
-            // Target target;
-            tagged JAL   .it : begin
-                // *** this has a destination
-                // wba( 31, pc_plus4 );
-                next_pc = { pc_plus4[31:28], it.target, 2'b0 };
-            end
-            // Rindx rsrc;  Rindx rdst;
-            tagged JALR  .it : begin
-                /// *** this has a destination
-                // wba( it.rdst, pc_plus4 );
-                next_pc = op1_val;
-            end
-            default: $display( " RTL-ERROR : %m dispatch_branch: Invalid branch op tag!" );
-        endcase
-        
-        if (next_pc != predictor.confirmPredict(entry.pc)) begin
-            rob.update(entry.tag, tagged Invalid, tagged Valid next_pc);
-        end
     endrule
     
     // alu completion stage
@@ -559,11 +486,23 @@ module  mkProc( Proc );
         aluRespQ.deq();
         
         // generate cdb packet and put on bus
-        CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:0};
+        CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:ans.epoch};
         cdb.put(cdb_ans);
-        
+
         // update ROB 
-        rob.update(ans.tag, tagged Valid ans.data, tagged Invalid);
+        case (instr_ext_type(ans.op))
+            ALU_OP: begin
+              //no misprediction possibility
+            end
+            JB_OP:  begin
+                let next_pc = ans.next_pc;
+                if (next_pc != predictor.confirmPredict(ans.pc)) begin
+                    rob.updatePrediction(ans.tag, next_pc);
+                end
+            end
+            default:
+                $display( " RTL-ERROR : %m alu_compl: Illegal instruction type for aluRespQ!" );
+        endcase
     endrule
 
     rule purge (rob.getLast().epoch != predictor.currentEpoch());
@@ -575,8 +514,8 @@ module  mkProc( Proc );
         
         // update register file with data and update rename
         ROBEntry head = rob.getLast();
-        if (isValid(head.data)) begin
-            rf.wr(head.dest, fromMaybe(0, head.data));
+        if (head.data matches tagged Valid .data) begin
+            rf.wr(head.dest, data);
 
 	   // check type for rename
 	   if(rename.rd1(head.dest) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag())
@@ -584,8 +523,7 @@ module  mkProc( Proc );
         end
 
         //if mispredict
-        if (isValid(head.mispredict)) begin
-            let dst = fromMaybe(?, head.mispredict); 
+        if (head.mispredict matches tagged Valid .dst) begin
             predictor.mispredict(head.pc, dst);
         end
 
@@ -623,7 +561,7 @@ module  mkProc( Proc );
         method Bit#(32) cpuToHost(int req);
             return (case (req)
                 0: cp0_tohost;
-                1: realpc;
+                1: 0;
                 2: 0;
             endcase);
         endmethod

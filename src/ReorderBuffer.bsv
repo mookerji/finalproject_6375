@@ -5,7 +5,8 @@ import ProcTypes::*;
 
 interface ROB#(numeric type robsize);
   method ActionValue#(Bit#(TLog#(robsize))) reserve(Epoch epoch, Addr pc, Rindx dest);
-  method Action update(Bit#(TLog#(robsize)) tag, Maybe#(Data) data, Maybe#(Addr) mispredict);
+  method Action updatePrediction(Bit#(TLog#(robsize)) tag, Addr mispredict);
+  method Action updateData(Bit#(TLog#(robsize)) tag, Data data);
   method Maybe#(ROBEntry) get(Bit#(TLog#(robsize)) tag);
   method ROBEntry getLast();
   method Bit#(TLog#(robsize)) getLastTag();
@@ -49,11 +50,17 @@ module mkReorderBuffer(ROB#(robsize));
     return tag;
   endmethod
 
-  method Action update(Bit#(TLog#(robsize)) tag, Maybe#(Data) data, Maybe#(Addr) mispredict);
+  method Action updateData(Bit#(TLog#(robsize)) tag, Data data);
     if (!isValid(entries[tag])) $display("fuck this shit");
     let entry = fromMaybe(?, entries[tag]);
-    entry.data = data;
-    entry.mispredict = mispredict;
+    entry.data = tagged Valid data;
+    entries[tag] <= tagged Valid entry;
+  endmethod
+
+  method Action updatePrediction(Bit#(TLog#(robsize)) tag, Addr mispredict);
+    if (!isValid(entries[tag])) $display("fuck this shit");
+    let entry = fromMaybe(?, entries[tag]);
+    entry.mispredict = tagged Valid mispredict;
     entries[tag] <= tagged Valid entry;
   endmethod
 
