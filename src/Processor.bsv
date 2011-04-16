@@ -152,28 +152,26 @@ module  mkProc( Proc );
         pcQ.enq(FetchMetaData { pc: pc, epoch: epoch } );
         instReqQ.enq( LoadReq{ addr: pc, tag: 0} );
     endrule
-    
+   
     // resolveOperand resolves an RSEntry Operand using an instructions src Rindx
-    // oper_indx should be 0 or 1 to resolve first and second operands, respectively
-    function ActionValue#(Operand) resolveOperand(Rindx src, Bit#(2) oper_indx);
+    function ActionValue#(Operand) resolveOperand(Rindx src, function RenameEntry renameRead(Rindx r), function Data rfRead(Rindx r), ActionValue#(CDBPacket) cdb_data_av);
         return
             actionvalue
                 Operand operand = ?;
                 
                 // grab mapped register
-                if (oper_indx > 1) $display( " RTL-ERROR : %m resolveOperand: Invalid oper_indx!" );
-                let rename_reg = (oper_indx==0) ? rename.rd1(src) : rename.rd2(src);
+                let rename_reg = renameRead(src);
                 
                 // set reservation station operands
                 case (rename_reg) matches 
                     // if register has valid datam, use it 
                     tagged Valid: begin
-                        operand = (oper_indx==0) ? tagged Imm rf.rd1(src) : tagged Imm rf.rd2(src);
+                        operand = tagged Imm rfRead(src);
                     end 
                     tagged Tag .rob_tag: begin
                         // if common data bus has bypassed rob data, use it   
                         if (cdb.hasData()) begin
-                            let cdb_data <- cdb.get(oper_indx);
+                            let cdb_data <- cdb_data_av;
                             if (cdb_data.tag == rob_tag) begin
                                 operand = tagged Imm fromMaybe(?, cdb_data.data);
                             end
@@ -195,6 +193,16 @@ module  mkProc( Proc );
             endactionvalue;
     endfunction 
     
+    function ActionValue#(Operand) resolveOperand0(Rindx src);
+      let cdb_data_av = cdb.get(0);
+      return resolveOperand(src, rename.rd1, rf.rd1, cdb_data_av);
+    endfunction
+ 
+    function ActionValue#(Operand) resolveOperand1(Rindx src);
+      let cdb_data_av = cdb.get(1);
+      return resolveOperand(src, rename.rd2, rf.rd2, cdb_data_av);
+    endfunction
+ 
     function Bool decode_issue_valid();
         case (firstInst()) matches
           tagged SW .it: return False;
@@ -227,7 +235,7 @@ module  mkProc( Proc );
             tagged LW .it : begin
                 // *** wait until rob entry is empty
                 rs_entry.op = tagged LW {};
-                rs_entry.op1 <- resolveOperand(it.rbase, 0);
+                rs_entry.op1 <- resolveOperand0(it.rbase);
                 rs_entry.op2 = tagged Imm sext(it.offset);
             end
 
@@ -235,7 +243,7 @@ module  mkProc( Proc );
                 // *** wait until rob entry is empty
                 // never happens
                 rs_entry.op = tagged SW {};
-                rs_entry.op1 <- resolveOperand(it.rbase, 0);
+                rs_entry.op1 <- resolveOperand0(it.rbase);
                 rs_entry.op2 = tagged Imm sext(it.offset);
             end
 
@@ -249,27 +257,27 @@ module  mkProc( Proc );
             end
             tagged SLTI  .it : begin
                 rs_entry.op = tagged  SLT {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm sext(it.imm);
             end
             tagged SLTIU .it : begin
                 rs_entry.op = tagged  SLTU {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm sext(it.imm); 
             end
             tagged ANDI  .it : begin
                 rs_entry.op = tagged  AND {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm zext(it.imm); 
             end
             tagged ORI   .it : begin
                 rs_entry.op = tagged  OR {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm zext(it.imm); 
             end
             tagged XORI  .it : begin
                 rs_entry.op = tagged  XOR {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm zext(it.imm); 
             end
 
@@ -284,99 +292,99 @@ module  mkProc( Proc );
             // *** make sure these 2nd operands are dispatched correctly
             tagged SLL   .it : begin
                 rs_entry.op = tagged  SLL {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm zext(it.shamt);
             end
             tagged SRL   .it : begin
                 rs_entry.op = tagged  SRL {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm zext(it.shamt);
             end
             tagged SRA   .it : begin
                 rs_entry.op = tagged  SRA {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm zext(it.shamt);
             end
 
             // Rindx rsrc;  Rindx rdst;  Rindx rshamt;
             tagged SLLV  .it : begin
                 rs_entry.op = tagged  SLL {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
-                rs_entry.op2 <- resolveOperand(it.rshamt, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
+                rs_entry.op2 <- resolveOperand1(it.rshamt);
             end
             tagged SRLV  .it : begin
                 rs_entry.op = tagged  SRL {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
-                rs_entry.op2 <- resolveOperand(it.rshamt, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
+                rs_entry.op2 <- resolveOperand1(it.rshamt);
             end
             tagged SRAV  .it : begin
                 rs_entry.op = tagged  SRA {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
-                rs_entry.op2 <- resolveOperand(it.rshamt, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
+                rs_entry.op2 <- resolveOperand1(it.rshamt);
             end
 
             // Rindx rsrc1; Rindx rsrc2; Rindx rdst;
             tagged ADDU  .it : begin
                 rs_entry.op = tagged  ADD {};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
             tagged SUBU  .it : begin
                 rs_entry.op = tagged  SUB {};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
             tagged AND   .it : begin
                 rs_entry.op = tagged  AND {};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
             tagged OR    .it : begin
                 rs_entry.op = tagged  OR {};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
             tagged XOR   .it : begin
                 rs_entry.op = tagged  XOR {};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
             tagged NOR   .it : begin
                 rs_entry.op = tagged  NOR {};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
             tagged SLT   .it : begin
                 rs_entry.op = tagged  SLT {};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
             tagged SLTU  .it : begin
                 rs_entry.op = tagged  SLTU {};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
 
             // -- Branches --------------------------------------------------
             // Rindx rsrc;  Simm offset;
             tagged BLEZ  .it : begin
                 rs_entry.op = tagged  BLEZ {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm sext(it.offset);
             end
             tagged BGTZ  .it : begin
                 rs_entry.op = tagged  BGTZ {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm sext(it.offset);
             end
             tagged BLTZ  .it : begin
                 rs_entry.op = tagged  BLTZ {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm sext(it.offset);
             end
             tagged BGEZ  .it : begin
                 rs_entry.op = tagged  BGEZ {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm sext(it.offset);
             end
 
@@ -385,13 +393,13 @@ module  mkProc( Proc );
             //  with instruction tag
             tagged BEQ   .it : begin
                 rs_entry.op = tagged  BEQ {offset:it.offset};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
             tagged BNE   .it : begin
                 rs_entry.op = tagged  BNE {offset:it.offset};
-                rs_entry.op1 <- resolveOperand(it.rsrc1, 0);
-                rs_entry.op2 <- resolveOperand(it.rsrc2, 1);
+                rs_entry.op1 <- resolveOperand0(it.rsrc1);
+                rs_entry.op2 <- resolveOperand1(it.rsrc2);
             end
 
             // -- Jumps -----------------------------------------------------
@@ -402,7 +410,7 @@ module  mkProc( Proc );
             // Rindx rsrc;
             tagged JR    .it : begin
                 rs_entry.op = tagged  JR {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
             end
             // Target target;
             tagged JAL   .it : begin
@@ -411,14 +419,14 @@ module  mkProc( Proc );
             // Rindx rsrc;  Rindx rdst;
             tagged JALR  .it : begin
                 rs_entry.op = tagged  JALR {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
             end
 
             // -- Cop0 ------------------------------------------------------
             // Rindx rsrc;  CP0indx cop0dst;
             tagged MTC0  .it : begin
                 rs_entry.op = tagged  MTC0 {};
-                rs_entry.op1 <- resolveOperand(it.rsrc, 0);
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
             end
 
             // Rindx rdst;  CP0indx cop0src;
@@ -448,8 +456,7 @@ module  mkProc( Proc );
         endcase
         
         // update rename table
-        RenameEntry dest_map = tagged Tag rs_entry.tag;
-        rename.wr(instr_dest(firstInst()), dest_map);
+        rename.wr(instr_dest(firstInst()), tagged Tag rs_entry.tag);
     endrule
         
     rule dispatch_alu;
