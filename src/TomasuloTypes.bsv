@@ -89,8 +89,9 @@ typedef struct {
 } ALUReq deriving (Eq, Bits);
 
 typedef struct {
-  Data   data;
-  ROBTag tag;
+    InstrExt  op;
+    Data   data;
+    ROBTag tag;
 } ALUResp deriving(Eq,Bits);                
 
 // operation types/classes
@@ -138,6 +139,40 @@ function Op_type instr_type( Instr inst );
         default          : return ?;
     endcase
 endfunction 
+
+// determine instruction type from InstrExt 
+// this duplicates instr_type functionality
+// used in alu_compl
+function Op_type instr_ext_type( InstrExt inst );
+    case ( inst ) matches
+        tagged ADD   .it : return ALU_OP;
+        tagged SLT   .it : return ALU_OP;
+        tagged SLTU  .it : return ALU_OP;
+        tagged AND   .it : return ALU_OP;
+        tagged OR    .it : return ALU_OP;
+        tagged XOR   .it : return ALU_OP;
+        tagged LUI   .it : return ALU_OP;
+        tagged SLL   .it : return ALU_OP;
+        tagged SRL   .it : return ALU_OP;
+        tagged SRA   .it : return ALU_OP;
+        tagged NOR   .it : return ALU_OP;
+        tagged J     .it : return JB_OP;
+        tagged JAL   .it : return JB_OP;
+        tagged JR    .it : return JB_OP;
+        tagged JALR  .it : return JB_OP;
+        tagged BEQ   .it : return JB_OP;
+        tagged BNE   .it : return JB_OP;
+        tagged BLEZ  .it : return JB_OP;
+        tagged BGTZ  .it : return JB_OP;
+        tagged BLTZ  .it : return JB_OP;
+        tagged BGEZ  .it : return JB_OP;
+        tagged MFC0  .it : return ALU_OP;
+        tagged MTC0  .it : return ALU_OP;
+        tagged ILLEGAL   : return ?;
+        default          : return ?;
+    endcase
+endfunction 
+
 
 // return instruction destination
 function Maybe#(Rindx) instr_dest(Instr inst);

@@ -481,93 +481,30 @@ module  mkProc( Proc );
         let entry = mem_rs.first();
     endrule
     
-    rule dispatch_branch(jb_rs.first().op1 matches tagged Imm .op1_val 
-                     &&& jb_rs.first().op2 matches tagged Imm .op2_val);
-                    
-        jb_rs.deq();
-        let entry = jb_rs.first();
-        Addr  next_pc = pc_plus4;
-
-        case (entry.op) matches
-            // -- Branches --------------------------------------------------
-            tagged BLEZ  .it : begin    
-                if ( signedLE( op1_val, 0 ) ) begin
-                    next_pc = pc_plus4 + (op2_val << 2);
-                end
-            end
-            tagged BGTZ  .it : begin
-                if ( signedGT( op1_val, 0 ) ) begin
-                    next_pc = pc_plus4 + (op2_val << 2);
-                end
-            end
-            tagged BLTZ  .it : begin
-                if ( signedLT( op1_val, 0 ) ) begin
-                    next_pc = pc_plus4 + (op2_val << 2);
-                end
-            end
-            tagged BGEZ  .it : begin
-                if ( signedGE( op1_val, 0 ) ) begin
-                    next_pc = pc_plus4 + (op2_val << 2);
-                end
-            end
-
-            tagged BEQ   .it : begin
-                if ( op1_val == op2_val ) begin
-                    next_pc = pc_plus4 + (sext(it.offset) << 2);
-                end
-            end
-            tagged BNE   .it : begin
-                if ( op1_val != op2_val ) begin
-                    next_pc = pc_plus4 + (sext(it.offset) << 2);
-                end
-            end
-
-            // -- Jumps -----------------------------------------------------
-            // Target target;
-            tagged J     .it : begin
-                next_pc = { pc_plus4[31:28], it.target, 2'b0 };
-            end
-            // Rindx rsrc;
-            tagged JR    .it : begin
-                next_pc = op1_val;
-            end
-            // Target target;
-            tagged JAL   .it : begin
-                // *** this has a destination
-                // wba( 31, pc_plus4 );
-                next_pc = { pc_plus4[31:28], it.target, 2'b0 };
-            end
-            // Rindx rsrc;  Rindx rdst;
-            tagged JALR  .it : begin
-                /// *** this has a destination
-                // wba( it.rdst, pc_plus4 );
-                next_pc = op1_val;
-            end
-            default: $display( " RTL-ERROR : %m dispatch_branch: Invalid branch op tag!" );
-        endcase
-        
-        realpc <= next_pc;
-        if (next_pc != predictor.confirmPredict(realpc)) begin
-            let rob_entry = fromMaybe(?, rob.get(entry.tag));
-            rob_entry.mispredict = tagged Valid tuple2(realpc, next_pc);
-            rob.update(entry.tag, rob_entry);
-        end
-    endrule
-    
     // alu completion stage
     rule alu_compl;
         traceTiny("mkProc", "compl","C");
         let ans = aluRespQ.first();
         aluRespQ.deq();
         
-        // generate cdb packet and put on bus
-        CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:0};
-        cdb.put(cdb_ans);
-        
-        // update ROB 
-        let rob_entry = fromMaybe(?, rob.get(ans.tag));
-        rob_entry.data = tagged Valid ans.data;
-        rob.update(ans.tag, rob_entry);
+        case (instr_ext_type(ans.op))
+            ALU_OP: begin
+                // generate cdb packet and put on bus
+                CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:0};
+                cdb.put(cdb_ans);
+            end
+            JB_OP:  begin
+                let next_pc = ans.data;
+                realpc <= next_pc;
+                if (next_pc != predictor.confirmPredict(realpc)) begin
+                    let rob_entry = fromMaybe(?, rob.get(ans.tag));
+                    rob_entry.mispredict = tagged Valid tuple2(realpc, next_pc);
+                    rob.update(ans.tag, rob_entry);
+                end
+            end
+            default:
+                $display( " RTL-ERROR : %m alu_compl: Illegal instruction type for aluRespQ!" );
+        endcase
     endrule
 
     rule purge (rob.getLast().epoch != predictor.currentEpoch());
