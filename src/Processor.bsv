@@ -87,6 +87,7 @@ module  mkProc( Proc );
     Reg#(Addr)  realpc    <- mkReg(32'h00001000);
     BranchPredictor#(16) predictor <- mkBranchPredictor();
     RFile#(Bit#(32))       rf    <- mkRFile(0, True);
+    FIFO#(FetchMetaData) pcQ <- mkFIFO();
 
     // Tomasulo algorithm data structures
     //TODO: make these fifos the correct datastructure
@@ -128,10 +129,11 @@ module  mkProc( Proc );
     endfunction
 
     function Epoch firstInstEpoch();
-        case ( instRespQ.first() ) matches
-            tagged LoadResp  .ld : return unpack(ld.tag);
-            tagged StoreResp .st : return unpack(st.tag);
-        endcase
+        return pcQ.first().epoch;
+    endfunction
+
+    function Addr firstInstPc();
+        return pcQ.first().pc;
     endfunction
 
     let pc_plus4 = realpc + 4;
@@ -145,8 +147,10 @@ module  mkProc( Proc );
         // no branch prediction
         traceTiny("mkProc", "fetch","F");
         traceTiny("mkProc", "pc", realpc);
-        let x <- predictor.predict();
-        instReqQ.enq( LoadReq{ addr:x, tag:predictor.currentEpoch() } );
+        let pc <- predictor.predict();
+        let epoch = predictor.currentEpoch();
+        pcQ.enq(FetchMetaData { pc: pc, epoch: epoch } );
+        instReqQ.enq( LoadReq{ addr: pc, tag: 0} );
     endrule
     
     // resolveOperand resolves an RSEntry Operand using an instructions src Rindx
@@ -206,14 +210,11 @@ module  mkProc( Proc );
         
         // grab instruction
         instRespQ.deq();
+        pcQ.deq();
 
         // initialize reservation station
         //  add op, rob tag to entry
         RSEntry rs_entry = ?; 
-        
-        // grab and set reorder buffer entry tag
-        let defaultEntry = ROBEntry { data:tagged Invalid, mispredict:tagged Invalid, dest:0, epoch:0 };
-        rs_entry.tag <- rob.reserve(defaultEntry);
         
         // by default, assume second operand is 0.
         rs_entry.op2 = tagged Imm 0;
@@ -435,6 +436,8 @@ module  mkProc( Proc );
             default : $display( " RTL-ERROR : %m decode_issue: Illegal instruction !" );
         endcase
         
+        // reserve reorder buffer entry
+        rs_entry.tag <- rob.reserve(firstInstEpoch(), firstInstPc(), instr_dest(firstInst()));
         // update reservation station by instruction type
         case (instr_type(firstInst()))
             ALU_OP: alu_rs.put(rs_entry);
@@ -444,18 +447,9 @@ module  mkProc( Proc );
                     $display( " RTL-ERROR : %m decode_issue: Illegal instruction type for rsentry!" );
         endcase
         
-        // initialize reorder buffer entry
-        ROBEntry rob_entry = ?;
-        rob_entry.epoch = predictor.currentEpoch(); //todo: use the epoch for this instruction
-        rob_entry.dest = fromMaybe(?, instr_dest(firstInst()));
         // update rename table
-        if (isValid(instr_dest(firstInst()))) begin
-            RenameEntry dest_map = tagged Tag rs_entry.tag;
-            rename.wr(rob_entry.dest, dest_map);
-        end
-        
-        // update reorder buffer 
-        rob.update(rs_entry.tag, rob_entry); 
+        RenameEntry dest_map = tagged Tag rs_entry.tag;
+        rename.wr(instr_dest(firstInst()), dest_map);
     endrule
         
     rule dispatch_alu;
@@ -546,11 +540,8 @@ module  mkProc( Proc );
             default: $display( " RTL-ERROR : %m dispatch_branch: Invalid branch op tag!" );
         endcase
         
-        realpc <= next_pc;
-        if (next_pc != predictor.confirmPredict(realpc)) begin
-            let rob_entry = fromMaybe(?, rob.get(entry.tag));
-            rob_entry.mispredict = tagged Valid tuple2(realpc, next_pc);
-            rob.update(entry.tag, rob_entry);
+        if (next_pc != predictor.confirmPredict(entry.pc)) begin
+            rob.update(entry.tag, tagged Invalid, tagged Valid next_pc);
         end
     endrule
     
@@ -565,9 +556,7 @@ module  mkProc( Proc );
         cdb.put(cdb_ans);
         
         // update ROB 
-        let rob_entry = fromMaybe(?, rob.get(ans.tag));
-        rob_entry.data = tagged Valid ans.data;
-        rob.update(ans.tag, rob_entry);
+        rob.update(ans.tag, tagged Valid ans.data, tagged Invalid);
     endrule
 
     rule purge (rob.getLast().epoch != predictor.currentEpoch());
@@ -589,11 +578,10 @@ module  mkProc( Proc );
 
         //if mispredict
         if (isValid(head.mispredict)) begin
-            match { .src, .dst } = fromMaybe(tuple2(0,0), head.mispredict); 
-            predictor.mispredict(src, dst);
+            let dst = fromMaybe(?, head.mispredict); 
+            predictor.mispredict(head.pc, dst);
         end
 
-        // pick up mispredicts from here
         // retire from the reorder buffer
         rob.complete();
     endrule

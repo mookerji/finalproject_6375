@@ -28,11 +28,13 @@ typedef struct {
         ROBTag tag;
         Operand op1;
         Operand op2;
+        Addr pc;
         } RSEntry deriving (Bits, Eq);
 
 typedef struct {
         Maybe#(Data) data;
-        Maybe#(Tuple2#(Addr,Addr)) mispredict;
+        Addr pc;
+        Maybe#(Addr) mispredict;
         Rindx dest;
         Epoch epoch;
         } ROBEntry deriving (Bits, Eq);
@@ -140,35 +142,35 @@ function Op_type instr_type( Instr inst );
 endfunction 
 
 // return instruction destination
-function Maybe#(Rindx) instr_dest(Instr inst);
+function Rindx instr_dest(Instr inst);
     case ( inst ) matches
-        tagged LW    .it :        return Valid (it.rdst);
-        tagged ADDIU .it :        return Valid (it.rdst);
-        tagged SLTI  .it :        return Valid (it.rdst);
-        tagged SLTIU .it :        return Valid (it.rdst);
-        tagged ANDI  .it :        return Valid (it.rdst);
-        tagged ORI   .it :        return Valid (it.rdst);
-        tagged XORI  .it :        return Valid (it.rdst);
-        tagged LUI   .it :        return Valid (it.rdst);
-        tagged SLL   .it :        return Valid (it.rdst);
-        tagged SRL   .it :        return Valid (it.rdst);
-        tagged SRA   .it :        return Valid (it.rdst);
-        tagged SLLV  .it :        return Valid (it.rdst);
-        tagged SRLV  .it :        return Valid (it.rdst);
-        tagged SRAV  .it :        return Valid (it.rdst);
-        tagged ADDU  .it :        return Valid (it.rdst);
-        tagged SUBU  .it :        return Valid (it.rdst);
-        tagged AND   .it :        return Valid (it.rdst);
-        tagged OR    .it :        return Valid (it.rdst);
-        tagged XOR   .it :        return Valid (it.rdst);
-        tagged NOR   .it :        return Valid (it.rdst);
-        tagged SLT   .it :        return Valid (it.rdst);
-        tagged SLTU  .it :        return Valid (it.rdst);
-        tagged JAL   .it :        return Valid (31);
-        tagged JALR  .it :        return Valid (it.rdst);
-        tagged MFC0  .it :        return Valid (it.rdst);
-        tagged MTC0  .it :        return Valid (it.cop0dst);
-        default :                 return Invalid;
+        tagged LW    .it :        return (it.rdst);
+        tagged ADDIU .it :        return (it.rdst);
+        tagged SLTI  .it :        return (it.rdst);
+        tagged SLTIU .it :        return (it.rdst);
+        tagged ANDI  .it :        return (it.rdst);
+        tagged ORI   .it :        return (it.rdst);
+        tagged XORI  .it :        return (it.rdst);
+        tagged LUI   .it :        return (it.rdst);
+        tagged SLL   .it :        return (it.rdst);
+        tagged SRL   .it :        return (it.rdst);
+        tagged SRA   .it :        return (it.rdst);
+        tagged SLLV  .it :        return (it.rdst);
+        tagged SRLV  .it :        return (it.rdst);
+        tagged SRAV  .it :        return (it.rdst);
+        tagged ADDU  .it :        return (it.rdst);
+        tagged SUBU  .it :        return (it.rdst);
+        tagged AND   .it :        return (it.rdst);
+        tagged OR    .it :        return (it.rdst);
+        tagged XOR   .it :        return (it.rdst);
+        tagged NOR   .it :        return (it.rdst);
+        tagged SLT   .it :        return (it.rdst);
+        tagged SLTU  .it :        return (it.rdst);
+        tagged JAL   .it :        return (31);
+        tagged JALR  .it :        return (it.rdst);
+        tagged MFC0  .it :        return (it.rdst);
+        tagged MTC0  .it :        return (it.cop0dst);
+        default :                 return 0;
     endcase
 endfunction     
 
