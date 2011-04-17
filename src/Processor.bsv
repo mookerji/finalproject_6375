@@ -91,7 +91,6 @@ module  mkProc( Proc );
     // Tomasulo algorithm data structures
     //TODO: make these fifos the correct datastructure
     FIFO#(RSEntry) mem_rs <- mkLFIFO();
-    FIFO#(RSEntry) jb_rs <- mkLFIFO();
     CommonDataBus#(CDBPacket, 4) cdb <- mkCDB();
     ROB#(16) rob <- mkReorderBuffer();
     RFile#(RenameEntry) rename <- mkRFile(tagged Valid, False);
@@ -193,8 +192,9 @@ module  mkProc( Proc );
     
     function Bool decode_issue_valid();
         case (firstInst()) matches
-          tagged SW .it: return False;
-          default: return !rob.isFull();
+            tagged LW .it: return rob.isEmpty();
+            tagged SW .it: return rob.isEmpty();
+            default: return !rob.isFull();
         endcase
     endfunction
     
@@ -210,32 +210,29 @@ module  mkProc( Proc );
         // initialize reservation station
         //  add op, rob tag to entry
         RSEntry rs_entry = ?; 
+        rs_entry.op1 = tagged Imm 0;
+        rs_entry.op2 = tagged Imm 0;
         
         // grab and set reorder buffer entry tag
         let defaultEntry = ROBEntry { data:tagged Invalid, mispredict:tagged Invalid, dest:0, epoch:0 };
         rs_entry.tag <- rob.reserve(defaultEntry);
-        
-        // by default, assume second operand is 0.
-        rs_entry.op2 = tagged Imm 0;
         
         // check in three places for register value with setRSEntry_src1 and setRSEntry_src2
         case ( firstInst() ) matches
 
             // -- Memory Ops ------------------------------------------------
             // Rindx rbase; Rindx {rdst, rsrc}; Simm offset;
+            // offsets are handled inconsistently. change eventually
             tagged LW .it : begin
-                // *** wait until rob entry is empty
                 rs_entry.op = tagged LW {};
-                rs_entry.op1 <- resolveOperand(it.rbase, 0);
-                rs_entry.op2 = tagged Imm sext(it.offset);
+                Addr addr = rf.rd1(it.rbase) + sext(it.offset);
+                dataReqQ.enq(LoadReq{ addr:addr, tag: zeroExtend(it.rdst)});
             end
 
             tagged SW .it :begin
-                // *** wait until rob entry is empty
-                // never happens
                 rs_entry.op = tagged SW {};
-                rs_entry.op1 <- resolveOperand(it.rbase, 0);
-                rs_entry.op2 = tagged Imm sext(it.offset);
+                Addr addr = rf.rd1(it.rbase) + sext(it.offset);
+                dataReqQ.enq( StoreReq{ tag:0, addr:addr, data:rf.rd2(it.rsrc) } );
             end
 
             // -- Simple Ops ------------------------------------------------
@@ -438,24 +435,26 @@ module  mkProc( Proc );
         // update reservation station by instruction type
         case (instr_type(firstInst()))
             ALU_OP: alu_rs.put(rs_entry);
-            JB_OP:  jb_rs.enq(rs_entry);
+            JB_OP:  alu_rs.put(rs_entry);
             MEM_OP: mem_rs.enq(rs_entry);
             default:
                     $display( " RTL-ERROR : %m decode_issue: Illegal instruction type for rsentry!" );
         endcase
-        
-        // initialize reorder buffer entry
-        ROBEntry rob_entry = ?;
-        rob_entry.epoch = predictor.currentEpoch(); //todo: use the epoch for this instruction
-        rob_entry.dest = fromMaybe(?, instr_dest(firstInst()));
-        // update rename table
-        if (isValid(instr_dest(firstInst()))) begin
-            RenameEntry dest_map = tagged Tag rs_entry.tag;
-            rename.wr(rob_entry.dest, dest_map);
+
+        if (instr_type(firstInst()) != MEM_OP) begin
+            // initialize reorder buffer entry
+            ROBEntry rob_entry = ?;
+            rob_entry.epoch = predictor.currentEpoch(); //todo: use the epoch for this instruction
+            rob_entry.dest = fromMaybe(?, instr_dest(firstInst()));
+            // update rename table
+            if (isValid(instr_dest(firstInst()))) begin
+                RenameEntry dest_map = tagged Tag rs_entry.tag;
+                rename.wr(rob_entry.dest, dest_map);
+            end
+
+            // update reorder buffer 
+            rob.update(rs_entry.tag, rob_entry);
         end
-        
-        // update reorder buffer 
-        rob.update(rs_entry.tag, rob_entry); 
     endrule
         
     rule dispatch_alu;
@@ -475,10 +474,18 @@ module  mkProc( Proc );
         ALUReq req = ALUReq{op:entry.op, op1:op1_val, op2:op2_val, tag:entry.tag};
         aluReqQ.enq(req);
     endrule
-    
-    rule dispatch_load;
+
+    rule mem_graduate_ld (dataRespQ.first() matches tagged LoadResp .ld
+                            &&& mem_rs.first().op matches tagged LW .it);
+        dataRespQ.deq();
         mem_rs.deq();
-        let entry = mem_rs.first();
+        rf.wr( truncate(ld.tag), ld.data );
+    endrule
+    
+    rule mem_graduate_st (dataRespQ.first() matches tagged StoreResp .st
+                            &&& mem_rs.first().op matches tagged SW .it);
+        dataRespQ.deq();
+        mem_rs.deq();
     endrule
     
     // alu completion stage
