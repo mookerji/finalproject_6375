@@ -81,6 +81,11 @@ typedef union tagged {
   void WBnothing;
 } WBResult deriving(Eq, Bits);
 
+typedef struct {
+  Epoch epoch;
+  Addr pc;
+} FetchMetaData deriving (Bits, Eq);
+
 //----------------------------------------------------------------------
 // Pack and Unpack
 //----------------------------------------------------------------------

@@ -35,9 +35,9 @@ module mkALU( ALU );
         let x = req.op1;
         let y = req.op2;
 
-        Data ans = ?;
-        // *** need to pass through this value from Processor.bsv
-        Addr pc_plus4 = ?; 
+        Data ans = 0;
+        Addr pc_plus4 = req.pc + 4;
+        Addr next_pc = pc_plus4;
 
         // *** check all of this    
         //  1. ensure arithmetic ops are done correctly
@@ -56,21 +56,27 @@ module mkALU( ALU );
             tagged NOR  .it:  ans = ~(x | y);
             // branch and jump operations calculate the next_pc
             // branch operations
-            tagged BLEZ .it:  if (signedLE(x, 0))  ans = pc_plus4 + (y << 2);
-            tagged BGTZ .it:  if (signedGT(x, 0))  ans = pc_plus4 + (y << 2);
-            tagged BLTZ .it:  if (signedLT(x, 0))  ans = pc_plus4 + (y << 2);
-            tagged BGEZ .it:  if (signedGE(x, 0))  ans = pc_plus4 + (y << 2);
-            tagged BEQ  .it:  if (x==y) ans = pc_plus4 + (sext(it.offset) << 2);
-            tagged BNE  .it:  if (x!=y) ans = pc_plus4 + (sext(it.offset) << 2);
-            // jumo operations (these just pass through)
-            tagged J    .it:  ans = { pc_plus4[31:28], it.target, 2'b0 };
-            tagged JR   .it:  ans = x;
-            tagged JAL  .it:  ans = { pc_plus4[31:28], it.target, 2'b0 };
-            tagged JALR .it:  ans = x;
+            tagged BLEZ .it:  if (signedLE(x, 0))  next_pc = pc_plus4 + (y << 2);
+            tagged BGTZ .it:  if (signedGT(x, 0))  next_pc = pc_plus4 + (y << 2);
+            tagged BLTZ .it:  if (signedLT(x, 0))  next_pc = pc_plus4 + (y << 2);
+            tagged BGEZ .it:  if (signedGE(x, 0))  next_pc = pc_plus4 + (y << 2);
+            tagged BEQ  .it:  if (x==y) next_pc = pc_plus4 + (sext(it.offset) << 2);
+            tagged BNE  .it:  if (x!=y) next_pc = pc_plus4 + (sext(it.offset) << 2);
+            // jump operations (these just pass through)
+            tagged J    .it:  next_pc = { pc_plus4[31:28], it.target, 2'b0 };
+            tagged JR   .it:  next_pc = x;
+            tagged JAL  .it: begin
+              next_pc = { pc_plus4[31:28], it.target, 2'b0 };
+              ans = pc_plus4;
+            end
+            tagged JALR .it: begin
+              next_pc = x;
+              ans = pc_plus4;
+            end
             default: $display("[ERROR] ALU: invalid Op_Exec op [%x]!", req.op);
         endcase
 
-        let resp = ALUResp{op:req.op, data:ans, tag:req.tag};
+        let resp = ALUResp{op:req.op, data:ans, tag:req.tag, pc: req.pc, next_pc: next_pc, epoch: req.epoch};
         respQ.enq(resp);
     endrule
 
