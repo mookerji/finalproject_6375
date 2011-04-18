@@ -495,15 +495,14 @@ module  mkProc( Proc );
         traceTiny("mkProc", "compl","C");
         let ans = aluRespQ.first();
         aluRespQ.deq();
-        
-        // generate cdb packet and put on bus
-        CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:ans.epoch};
-        cdb.put(cdb_ans);
 
         // update ROB 
         case (instr_ext_type(ans.op))
             ALU_OP: begin
               //no misprediction possibility
+              // generate cdb packet and put on bus
+              CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:ans.epoch};
+              cdb.put(cdb_ans);
             end
             JB_OP:  begin
                 let next_pc = ans.next_pc;
