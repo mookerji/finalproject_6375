@@ -91,7 +91,6 @@ module  mkProc( Proc );
 
     // Tomasulo algorithm data structures
     //TODO: make these fifos the correct datastructure
-    FIFO#(RSEntry) mem_rs <- mkLFIFO();
     CommonDataBus#(CDBPacket) cdb <- mkCDB();
     ROB#(16) rob <- mkReorderBuffer();
     RFile#(RenameEntry) rename <- mkRFile(tagged Valid, False);
@@ -172,13 +171,13 @@ module  mkProc( Proc );
                         if (cdb.hasData()) begin
                             let cdb_data <- cdb_data_av;
                             if (cdb_data.tag == rob_tag) begin
-                                operand = tagged Imm fromMaybe(?, cdb_data.data);
+                                operand = tagged Imm fromMaybe(2222, cdb_data.data);
                             end
                         
                         // if the rob has tagged data and data is valid, use it
                         end else if (rob.get(rob_tag) matches tagged Valid .rob_entry 
                                         &&& isValid(rob_entry.data)) begin
-                            operand = tagged Imm fromMaybe(?, rob_entry.data);
+                            operand = tagged Imm fromMaybe(2222, rob_entry.data);
                         
                         // if nowhere has it, invalidate the operand
                         end else begin 
@@ -201,12 +200,14 @@ module  mkProc( Proc );
       let cdb_data_av = cdb.get1();
       return resolveOperand(src, rename.rd2, rf.rd2, cdb_data_av);
     endfunction
+
+    Reg#(Bool) mem_in_flight <- mkReg(False);
  
     function Bool decode_issue_valid();
         case (firstInst()) matches
-            tagged LW .it: return rob.isEmpty();
-            tagged SW .it: return rob.isEmpty();
-            default: return !rob.isFull();
+            tagged LW .it: return rob.isEmpty() && !mem_in_flight;
+            tagged SW .it: return rob.isEmpty() && !mem_in_flight;
+            default: return !rob.isFull() && !mem_in_flight;
         endcase
     endfunction
     
@@ -233,15 +234,19 @@ module  mkProc( Proc );
             // Rindx rbase; Rindx {rdst, rsrc}; Simm offset;
             // offsets are handled inconsistently. change eventually
             tagged LW .it : begin
+$display("issuing LW");
                 rs_entry.op = tagged LW {};
                 Addr addr = rf.rd1(it.rbase) + sext(it.offset);
                 dataReqQ.enq(LoadReq{ addr:addr, tag: zeroExtend(it.rdst)});
+                mem_in_flight <= True;
             end
 
-            tagged SW .it :begin
+            tagged SW .it : begin
+$display("issuing SW");
                 rs_entry.op = tagged SW {};
                 Addr addr = rf.rd1(it.rbase) + sext(it.offset);
                 dataReqQ.enq( StoreReq{ tag:0, addr:addr, data:rf.rd2(it.rsrc) } );
+                mem_in_flight <= True;
             end
 
             // -- Simple Ops ------------------------------------------------
@@ -422,13 +427,13 @@ module  mkProc( Proc );
             // Rindx rsrc;  CP0indx cop0dst;
             // make sure the ROB etc handles 
             tagged MTC0  .it : begin
-                rs_entry.op = tagged  ADD {};
+                rs_entry.op = tagged  MTC0 {};
                 rs_entry.op1 <- resolveOperand0(it.rsrc);
             end
 
             // Rindx rdst;  CP0indx cop0src;
             tagged MFC0  .it : begin
-                rs_entry.op = tagged  ADD {};
+                rs_entry.op = tagged  MFC0 {};
                 case (it.cop0src)
                     5'd10 :  rs_entry.op1 = tagged Imm zext(pack(cp0_statsEn)); 
                     5'd20 :  rs_entry.op1 = tagged Imm zext(cp0_fromhost);
@@ -446,21 +451,23 @@ module  mkProc( Proc );
         if (instr_type(firstInst()) != MEM_OP) begin
             // reserve reorder buffer entry
             rs_entry.tag <- rob.reserve(firstInstEpoch(), firstInstPc(), instr_dest(firstInst()));
-	    $display("decode_issue tag: %d", rs_entry.tag);
+            $write(fshow(rs_entry.op), " [", fshow(rs_entry.op1), ", ", fshow(rs_entry.op2), "] ");
+	    $display(" decode_issue tag: %d @ pc=%h", rs_entry.tag, firstInstPc());
 
             // update reservation station by instruction type
             case (instr_type(firstInst()))
                 ALU_OP: alu_rs.put(rs_entry);
                 JB_OP:  alu_rs.put(rs_entry);
+                MTC0_OP:  alu_rs.put(rs_entry);
                 default:
                         $display( " RTL-ERROR : %m decode_issue: Illegal instruction type for rsentry!" );
             endcase
 
             // update rename table
-            if (instr_dest(firstInst()) matches tagged ArchReg .areg)
+            if (instr_dest(firstInst()) matches tagged ArchReg .areg) begin
                 rename.wr(areg, tagged Tag rs_entry.tag);
-        end else begin
-            mem_rs.enq(rs_entry);
+                $display("register %d is now found in ROB entry %d",areg,rs_entry.tag);
+            end
         end
     endrule
         
@@ -480,22 +487,22 @@ module  mkProc( Proc );
         endcase
 	$display("dispatch_alu tag: %d", entry.tag);
         $write("putting ALUReq ",fshow(entry.op));
-        $display("| %d | %d | %d | %h | %d",op1_val, op2_val, entry.tag, entry.pc, entry.epoch);
+        $display("| %d | %d | %d | %h | %d | %d",op1_val, op2_val, entry.tag, entry.pc, entry.epoch, predictor.currentEpoch());
         ALUReq req = ALUReq{op:entry.op, op1:op1_val, op2:op2_val, tag:entry.tag, pc: entry.pc, epoch: entry.epoch};
         aluReqQ.enq(req);
     endrule
 
-    rule mem_graduate_ld (dataRespQ.first() matches tagged LoadResp .ld
-                            &&& mem_rs.first().op matches tagged LW .it);
+    rule mem_graduate_ld (dataRespQ.first() matches tagged LoadResp .ld);
+$display("finished load");
         dataRespQ.deq();
-        mem_rs.deq();
         rf.wr( truncate(ld.tag), ld.data );
+        mem_in_flight <= False;
     endrule
     
-    rule mem_graduate_st (dataRespQ.first() matches tagged StoreResp .st
-                            &&& mem_rs.first().op matches tagged SW .it);
+    rule mem_graduate_st (dataRespQ.first() matches tagged StoreResp .st);
+$display("finished store");
         dataRespQ.deq();
-        mem_rs.deq();
+        mem_in_flight <= False;
     endrule
     
     // alu completion stage
@@ -513,7 +520,7 @@ module  mkProc( Proc );
         if (instr_ext_type(ans.op) == JB_OP) begin
             $display("alu_compl for jb tag: %d", ans.tag);
             let next_pc = ans.next_pc;
-            if (next_pc != predictor.confirmPredict(ans.pc)) begin
+            if (next_pc != predictor.confirmPredict(ans.pc) && ans.epoch == predictor.currentEpoch()) begin
                 rob.updatePrediction(ans.tag, next_pc);
             end
         end
@@ -522,11 +529,17 @@ module  mkProc( Proc );
     rule cdb_rob_bypass;
         let packet <- cdb.get3();
         $display("cdb_rob_bypass tag: %d", packet.tag);
-        if (packet.data matches tagged Valid .it)
+        if (packet.data matches tagged Valid .it &&& packet.epoch == predictor.currentEpoch())
           rob.updateData(packet.tag, it);
     endrule
 
     rule purge (rob.getLast().epoch != predictor.currentEpoch());
+        ROBEntry head = rob.getLast();
+        if(head.dest matches tagged ArchReg .areg &&& rename.rd1(areg) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag()) begin
+           rename.wr(areg, tagged Valid);
+$display("flushed rename map entry for register %d",areg);
+        end
+$display("purge happened");
         rob.complete();
     endrule
     
@@ -551,7 +564,7 @@ module  mkProc( Proc );
         // check type for rename
         if(head.dest matches tagged ArchReg .areg &&& rename.rd1(areg) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag()) begin
            rename.wr(areg, tagged Valid);
-$display("flushed rename map entry");
+$display("flushed rename map entry for register %d",areg);
         end
 
         //if mispredict

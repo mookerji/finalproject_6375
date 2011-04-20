@@ -21,7 +21,8 @@ module mkCDB(CommonDataBus#(t)) provisos (Bits#(t,c__));
     return x && y;
   endfunction
 
-  rule allAcked(foldr1(andFn, readVReg(acks)) == True);
+//  rule allAcked(foldr1(andFn, readVReg(acks)) == True);
+  rule allAcked(acks[2] && acks[3]);
 $display("all acked");
     writeVReg(acks, replicate(False));
     data <= tagged Invalid;

@@ -46,6 +46,7 @@ module mkReorderBuffer(ROB#(robsize));
       dest: dest,
       epoch: epoch
     };
+$display("reserved a rob entry for pc %h",pc);
     let tag = addPtr;
     entries[tag] <= tagged Valid entry;
     addPtr <= tag + 1;
@@ -103,6 +104,7 @@ $display("ROB complete");
     let tag = removePtr;
     entries[tag] <= tagged Invalid;
     removePtr <= tag + 1;
+    if (addPtr == removePtr+1) $display("ROB is empty now");
   endmethod
 endmodule
 

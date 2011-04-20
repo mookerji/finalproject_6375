@@ -21,6 +21,15 @@ typedef union tagged {
     Data Imm; // ugh
 } Operand deriving (Bits, Eq);
 
+instance FShow#(Operand);
+  function Fmt fshow (Operand op);
+    case (op) matches
+      tagged Tag .it: return $format("Tag %d", it);
+      tagged Imm .it: return $format("Imm %d", it);
+    endcase
+  endfunction
+endinstance
+
 
 typedef Bit#(4) ROBTag;
 
@@ -84,7 +93,7 @@ typedef union tagged
   struct { } BGEZ;
 
   struct { } MFC0;
-  struct { CP0indx cop0dst; } MTC0;
+  struct { } MTC0;
 
   void        ILLEGAL;
 
@@ -181,8 +190,8 @@ function Op_type instr_type( Instr inst );
         tagged BGTZ  .it : return JB_OP;
         tagged BLTZ  .it : return JB_OP;
         tagged BGEZ  .it : return JB_OP;
-        tagged MFC0  .it : return ALU_OP;
-        tagged MTC0  .it : return ALU_OP; // handle this separately
+        tagged MFC0  .it : return MTC0_OP;
+        tagged MTC0  .it : return MTC0_OP; // handle this separately
         tagged ILLEGAL   : return ?;
         default          : return ?;
     endcase

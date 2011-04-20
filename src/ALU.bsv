@@ -75,6 +75,8 @@ module mkALU( ALU );
               next_pc = x;
               ans = pc_plus4;
             end
+            tagged MTC0 .it: ans = x;
+            tagged MFC0 .it: ans = x;
             default: $display("[ERROR] ALU: invalid Op_Exec op [%m]!", req.op);
         endcase
 
