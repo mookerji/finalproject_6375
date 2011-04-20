@@ -73,7 +73,7 @@ module mkALU( ALU );
               next_pc = x;
               ans = pc_plus4;
             end
-            default: $display("[ERROR] ALU: invalid Op_Exec op [%x]!", req.op);
+            default: $display("[ERROR] ALU: invalid Op_Exec op [%m]!", req.op);
         endcase
 
         let resp = ALUResp{op:req.op, data:ans, tag:req.tag, pc: req.pc, next_pc: next_pc, epoch: req.epoch};

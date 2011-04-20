@@ -2,6 +2,7 @@ import StmtFSM::*;
 import Vector::*;
 import TomasuloTypes::*;
 import ProcTypes::*;
+import ConfigReg::*;
 
 interface ROB#(numeric type robsize);
   method ActionValue#(Bit#(TLog#(robsize))) reserve(Epoch epoch, Addr pc, Rindx dest);

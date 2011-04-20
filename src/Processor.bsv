@@ -420,14 +420,15 @@ module  mkProc( Proc );
 
             // -- Cop0 ------------------------------------------------------
             // Rindx rsrc;  CP0indx cop0dst;
+            // make sure the ROB etc handles 
             tagged MTC0  .it : begin
-                rs_entry.op = tagged  MTC0 {};
+                rs_entry.op = tagged  ADD {};
                 rs_entry.op1 <- resolveOperand0(it.rsrc);
             end
 
             // Rindx rdst;  CP0indx cop0src;
             tagged MFC0  .it : begin
-                rs_entry.op = tagged  MFC0 {};
+                rs_entry.op = tagged  ADD {};
                 case (it.cop0src)
                     5'd10 :  rs_entry.op1 = tagged Imm zext(pack(cp0_statsEn)); 
                     5'd20 :  rs_entry.op1 = tagged Imm zext(cp0_fromhost);
@@ -524,12 +525,19 @@ module  mkProc( Proc );
         
         // update register file with data and update rename
         ROBEntry head = rob.getLast();
+        
         if (head.data matches tagged Valid .data) begin
-            rf.wr(head.dest, data);
+            case (head.dest) 
+                // MTC0
+                5'd10 : cp0_statsEn <= unpack(truncate(data)); 
+                5'd21 : cp0_tohost  <= truncate(data);
+                // everything else
+                default : rf.wr(head.dest, data);
+            endcase
 
-	   // check type for rename
-	   if(rename.rd1(head.dest) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag())
-              rename.wr(head.dest, tagged Valid);
+            // check type for rename
+            if(rename.rd1(head.dest) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag())
+                rename.wr(head.dest, tagged Valid);
         end
 
         //if mispredict
