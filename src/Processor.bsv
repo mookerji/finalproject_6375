@@ -25,6 +25,7 @@ import GetPut::*;
 import ClientServer::*;
 import FIFO::*;
 import FIFOF::*;
+import FShow::*;
 import RWire::*;
 import Vector::*;
 
@@ -91,7 +92,7 @@ module  mkProc( Proc );
     // Tomasulo algorithm data structures
     //TODO: make these fifos the correct datastructure
     FIFO#(RSEntry) mem_rs <- mkLFIFO();
-    CommonDataBus#(CDBPacket, 4) cdb <- mkCDB();
+    CommonDataBus#(CDBPacket) cdb <- mkCDB();
     ROB#(16) rob <- mkReorderBuffer();
     RFile#(RenameEntry) rename <- mkRFile(tagged Valid, False);
     ReservationStation alu_rs <- mkReservationStation(cdb);
@@ -192,12 +193,12 @@ module  mkProc( Proc );
     endfunction 
     
     function ActionValue#(Operand) resolveOperand0(Rindx src);
-      let cdb_data_av = cdb.get(0);
+      let cdb_data_av = cdb.get0();
       return resolveOperand(src, rename.rd1, rf.rd1, cdb_data_av);
     endfunction
  
     function ActionValue#(Operand) resolveOperand1(Rindx src);
-      let cdb_data_av = cdb.get(1);
+      let cdb_data_av = cdb.get1();
       return resolveOperand(src, rename.rd2, rf.rd2, cdb_data_av);
     endfunction
  
@@ -281,7 +282,6 @@ module  mkProc( Proc );
             tagged LUI   .it : begin
                 rs_entry.op = tagged  LUI {};
                 rs_entry.op1 = tagged Imm zext(it.imm);
-                rs_entry.op2 = tagged Imm 32'd16;
             end
 
             // Rindx rsrc;  Rindx rdst;  Shamt shamt;
@@ -441,22 +441,26 @@ module  mkProc( Proc );
             default : $display( " RTL-ERROR : %m decode_issue: Illegal instruction !" );
         endcase
 
+        rs_entry.epoch = firstInstEpoch();
+        rs_entry.pc = firstInstPc();
         if (instr_type(firstInst()) != MEM_OP) begin
             // reserve reorder buffer entry
             rs_entry.tag <- rob.reserve(firstInstEpoch(), firstInstPc(), instr_dest(firstInst()));
-            rs_entry.epoch = firstInstEpoch();
+	    $display("decode_issue tag: %d", rs_entry.tag);
 
             // update reservation station by instruction type
             case (instr_type(firstInst()))
                 ALU_OP: alu_rs.put(rs_entry);
                 JB_OP:  alu_rs.put(rs_entry);
-                MEM_OP: mem_rs.enq(rs_entry);
                 default:
                         $display( " RTL-ERROR : %m decode_issue: Illegal instruction type for rsentry!" );
             endcase
 
             // update rename table
-            rename.wr(instr_dest(firstInst()), tagged Tag rs_entry.tag);
+            if (instr_dest(firstInst()) matches tagged ArchReg .areg)
+                rename.wr(areg, tagged Tag rs_entry.tag);
+        end else begin
+            mem_rs.enq(rs_entry);
         end
     endrule
         
@@ -474,6 +478,9 @@ module  mkProc( Proc );
           tagged Imm .x: op2_val = x;
           tagged Tag .x: $display("Shouldn't happen");
         endcase
+	$display("dispatch_alu tag: %d", entry.tag);
+        $write("putting ALUReq ",fshow(entry.op));
+        $display("| %d | %d | %d | %h | %d",op1_val, op2_val, entry.tag, entry.pc, entry.epoch);
         ALUReq req = ALUReq{op:entry.op, op1:op1_val, op2:op2_val, tag:entry.tag, pc: entry.pc, epoch: entry.epoch};
         aluReqQ.enq(req);
     endrule
@@ -496,55 +503,63 @@ module  mkProc( Proc );
         traceTiny("mkProc", "compl","C");
         let ans = aluRespQ.first();
         aluRespQ.deq();
+	
 
         // update ROB 
-        case (instr_ext_type(ans.op))
-            ALU_OP: begin
-              //no misprediction possibility
-              // generate cdb packet and put on bus
-              CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:ans.epoch};
-              cdb.put(cdb_ans);
+        // generate cdb packet and put on bus
+	$display("alu_compl for alu tag: %d", ans.tag);
+        CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:ans.epoch};
+        cdb.put(cdb_ans);
+        if (instr_ext_type(ans.op) == JB_OP) begin
+            $display("alu_compl for jb tag: %d", ans.tag);
+            let next_pc = ans.next_pc;
+            if (next_pc != predictor.confirmPredict(ans.pc)) begin
+                rob.updatePrediction(ans.tag, next_pc);
             end
-            JB_OP:  begin
-                let next_pc = ans.next_pc;
-                if (next_pc != predictor.confirmPredict(ans.pc)) begin
-                    rob.updatePrediction(ans.tag, next_pc);
-                end
-            end
-            default:
-                $display( " RTL-ERROR : %m alu_compl: Illegal instruction type for aluRespQ!" );
-        endcase
+        end
+    endrule
+
+    rule cdb_rob_bypass;
+        let packet <- cdb.get3();
+        $display("cdb_rob_bypass tag: %d", packet.tag);
+        if (packet.data matches tagged Valid .it)
+          rob.updateData(packet.tag, it);
     endrule
 
     rule purge (rob.getLast().epoch != predictor.currentEpoch());
         rob.complete();
     endrule
     
-    rule graduate (rob.getLast().epoch == predictor.currentEpoch());
+    rule graduate (rob.getLast().data matches tagged Valid .data &&& rob.getLast().epoch == predictor.currentEpoch());
         traceTiny("mkProc", "graduate","G");
         
         // update register file with data and update rename
         ROBEntry head = rob.getLast();
         
-        if (head.data matches tagged Valid .data) begin
-            case (head.dest) 
-                // MTC0
-                5'd10 : cp0_statsEn <= unpack(truncate(data)); 
-                5'd21 : cp0_tohost  <= truncate(data);
-                // everything else
-                default : rf.wr(head.dest, data);
-            endcase
+        case (head.dest) matches
+            // MTC0
+            tagged SpecReg .sreg:
+              case (sreg)
+                  5'd10 : cp0_statsEn <= unpack(truncate(data)); 
+                  5'd21 : cp0_tohost  <= truncate(data);
+                  default: $display("oh noes this never happens to us!!!");
+              endcase
+            tagged ArchReg .areg: rf.wr(areg, data);
+            default : $display("blow chunks through a windowpane");
+        endcase
 
-            // check type for rename
-            if(rename.rd1(head.dest) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag())
-                rename.wr(head.dest, tagged Valid);
+        // check type for rename
+        if(head.dest matches tagged ArchReg .areg &&& rename.rd1(areg) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag()) begin
+           rename.wr(areg, tagged Valid);
+$display("flushed rename map entry");
         end
 
         //if mispredict
         if (head.mispredict matches tagged Valid .dst) begin
             predictor.mispredict(head.pc, dst);
+$display("committed mispredict");
         end
-
+$display("graduation happened");
         // retire from the reorder buffer
         rob.complete();
     endrule

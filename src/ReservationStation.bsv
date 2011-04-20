@@ -7,12 +7,12 @@ interface ReservationStation;
   method Action put(RSEntry entry);
 endinterface
 
-module mkReservationStation(CommonDataBus#(CDBPacket, 4) cdb, ReservationStation rsifc);
+module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rsifc);
 
   Vector#(2, Reg#(Maybe#(RSEntry))) entries <- replicateM(mkReg(tagged Invalid));
 
   rule cdb_recv;
-    let packet <- cdb.get(2);
+    let packet <- cdb.get2();
     let tag = packet.tag;
     if (isValid(packet.data)) begin
       let oper = tagged Imm fromMaybe(?, packet.data);

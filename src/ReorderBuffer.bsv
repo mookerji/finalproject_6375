@@ -5,7 +5,7 @@ import ProcTypes::*;
 import ConfigReg::*;
 
 interface ROB#(numeric type robsize);
-  method ActionValue#(Bit#(TLog#(robsize))) reserve(Epoch epoch, Addr pc, Rindx dest);
+  method ActionValue#(Bit#(TLog#(robsize))) reserve(Epoch epoch, Addr pc, WBReg dest);
   method Action updatePrediction(Bit#(TLog#(robsize)) tag, Addr mispredict);
   method Action updateData(Bit#(TLog#(robsize)) tag, Data data);
   method Maybe#(ROBEntry) get(Bit#(TLog#(robsize)) tag);
@@ -18,7 +18,7 @@ endinterface
 
 //16 entry ROB
 module mkReorderBuffer(ROB#(robsize));
-  ROBEntry defaultEntry = ROBEntry { pc: 0, data:tagged Invalid, mispredict:tagged Invalid, dest:0, epoch:0 };
+  ROBEntry defaultEntry = ROBEntry { pc: 0, data:tagged Invalid, mispredict:tagged Invalid, dest:tagged ArchReg 0, epoch:0 };
 
   Vector#(robsize, Reg#(Maybe#(ROBEntry))) entries <- replicateM(mkReg(tagged Invalid));
   Reg#(Bit#(TLog#(robsize))) addPtr <- mkReg(0);
@@ -27,6 +27,7 @@ module mkReorderBuffer(ROB#(robsize));
   function Bool isFullFn();
     return isValid(entries[addPtr]);
   endfunction
+
 
   method Bool isEmpty();
     return addPtr == removePtr && !isValid(entries[addPtr]);
@@ -37,7 +38,7 @@ module mkReorderBuffer(ROB#(robsize));
   endmethod
 
   //initialize the reorder buffer's tail and return its key
-  method ActionValue#(Bit#(TLog#(robsize))) reserve(Epoch epoch, Addr pc, Rindx dest) if (!isFullFn());
+  method ActionValue#(Bit#(TLog#(robsize))) reserve(Epoch epoch, Addr pc, WBReg dest) if (!isFullFn());
     let entry = ROBEntry {
       data: tagged Invalid,
       pc: pc,
@@ -52,14 +53,34 @@ module mkReorderBuffer(ROB#(robsize));
   endmethod
 
   method Action updateData(Bit#(TLog#(robsize)) tag, Data data);
-    if (!isValid(entries[tag])) $display("fuck this shit");
+    if (!isValid(entries[tag])) begin
+      $display("fuck this shit data");
+      for (Integer i = 0; i < valueof(robsize); i = i+1) begin
+        if (entries[i] matches tagged Valid .ent) begin
+            $display("tag:%d, data:%d, mispred:%d, dest:%d, pc:%d, epoch:%d", fromInteger(i), fromMaybe(22,ent.data), fromMaybe(222222,ent.mispredict), ent.dest, ent.pc, ent.epoch);
+        end else begin
+            $display("%d invalid", valueof(robsize));
+        end
+      end
+      $finish; 
+    end
     let entry = fromMaybe(?, entries[tag]);
     entry.data = tagged Valid data;
     entries[tag] <= tagged Valid entry;
   endmethod
 
   method Action updatePrediction(Bit#(TLog#(robsize)) tag, Addr mispredict);
-    if (!isValid(entries[tag])) $display("fuck this shit");
+    if (!isValid(entries[tag])) begin
+      $display("fuck this shit mispredict");
+      for (Integer i = 0; i < valueof(robsize); i = i+1) begin
+        if (entries[i] matches tagged Valid .ent) begin
+            $display("tag:%d, data:%d, mispred:%d, dest:%d, pc:%d, epoch:%d", fromInteger(i), fromMaybe(22,ent.data), fromMaybe(222222,ent.mispredict), ent.dest, ent.pc, ent.epoch);
+        end else begin
+            $display("%d invalid", valueof(robsize));
+        end
+      end
+      $finish; 
+    end
     let entry = fromMaybe(?, entries[tag]);
     entry.mispredict = tagged Valid mispredict;
     entries[tag] <= tagged Valid entry;
@@ -78,6 +99,7 @@ module mkReorderBuffer(ROB#(robsize));
   endmethod
 
   method Action complete() if (isValid(entries[removePtr]));
+$display("ROB complete");
     let tag = removePtr;
     entries[tag] <= tagged Invalid;
     removePtr <= tag + 1;
@@ -88,7 +110,7 @@ module mkROBTest(Empty);
   ROB#(16) rob <- mkReorderBuffer();
 
   function makeROBE(Epoch epoch);
-    return ROBEntry { pc: 0, data:tagged Invalid, mispredict:tagged Invalid, dest:0, epoch:epoch };
+    return ROBEntry { pc: 0, data:tagged Invalid, mispredict:tagged Invalid, dest:tagged ArchReg 0, epoch:epoch };
   endfunction
 
   Reg#(Bit#(4)) tag1 <- mkReg(10);
@@ -97,8 +119,8 @@ module mkROBTest(Empty);
   Stmt testInOrder =
   seq
     $display("start testInOrder");
-    action let ent <- rob.reserve(1,0,0); tag1 <= ent; endaction
-    action let ent <- rob.reserve(2,0,0); tag2 <= ent; endaction
+    action let ent <- rob.reserve(1,0,tagged ArchReg 0); tag1 <= ent; endaction
+    action let ent <- rob.reserve(2,0,tagged ArchReg 0); tag2 <= ent; endaction
     if (rob.isEmpty()) $display("You failed");
     if (rob.getLast().epoch != 1) $display("You failed");
     rob.complete();
@@ -118,7 +140,7 @@ module mkROBTest(Empty);
     index <= 0;
     while (index < 16) seq
       action
-        let tag <- rob.reserve(0, 0, 0);
+        let tag <- rob.reserve(0, 0, tagged ArchReg 0);
         tagVector[index] <= tag;
 	index <= index + 1;
       endaction

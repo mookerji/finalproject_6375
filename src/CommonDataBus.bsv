@@ -2,15 +2,18 @@ import StmtFSM::*;
 import TomasuloTypes::*;
 import Vector::*;
 
-interface CommonDataBus#(type t, numeric type nlisteners);
+interface CommonDataBus#(type t);
   method Action put(t entry);
-  method ActionValue#(t) get(Bit#(TLog#(nlisteners)) id);
+  method ActionValue#(t) get0();
+  method ActionValue#(t) get1();
+  method ActionValue#(t) get2();
+  method ActionValue#(t) get3();
   method Bool hasData();
   method Action dumpState();
 endinterface
 
-module mkCDB(CommonDataBus#(t, nlisteners)) provisos (Add#(1,a__,nlisteners), Bits#(t,c__));
-  Vector#(nlisteners, Reg#(Bool)) acks <- replicateM(mkReg(False));
+module mkCDB(CommonDataBus#(t)) provisos (Bits#(t,c__));
+  Vector#(4, Reg#(Bool)) acks <- replicateM(mkReg(False));
   Reg#(Maybe#(t)) data <- mkReg(tagged Invalid);
   RWire#(t) dataWire <- mkRWire();
 
@@ -19,6 +22,7 @@ module mkCDB(CommonDataBus#(t, nlisteners)) provisos (Add#(1,a__,nlisteners), Bi
   endfunction
 
   rule allAcked(foldr1(andFn, readVReg(acks)) == True);
+$display("all acked");
     writeVReg(acks, replicate(False));
     data <= tagged Invalid;
   endrule
@@ -30,7 +34,7 @@ module mkCDB(CommonDataBus#(t, nlisteners)) provisos (Add#(1,a__,nlisteners), Bi
 
   method Action dumpState();
     $display("dumping state");
-    for (Integer i = 0; i < valueof(nlisteners); i = i + 1)
+    for (Integer i = 0; i < 4; i = i + 1)
       $display("acks[%d] = %b",i,acks[i]);
   endmethod
 
@@ -38,9 +42,42 @@ module mkCDB(CommonDataBus#(t, nlisteners)) provisos (Add#(1,a__,nlisteners), Bi
     return isValid(data);
   endmethod
 
-  method ActionValue#(t) get(Bit#(TLog#(nlisteners)) id) if (isValid(data) || isValid(dataWire.wget()));
-    if (acks[id] == True) $display("Cannot ack for an ID twice per bus cycle");
-    acks[id] <= True;
+  method ActionValue#(t) get0() if ((isValid(data) || isValid(dataWire.wget())) && !acks[0]);
+$display("get0 acked");
+    acks[0] <= True;
+    if (dataWire.wget() matches tagged Valid .it) return it;
+    else if (data matches tagged Valid .it) return it;
+    else begin
+      $display("this shouldn't happen");
+      return ?;
+    end
+  endmethod
+
+  method ActionValue#(t) get1() if ((isValid(data) || isValid(dataWire.wget())) && !acks[1]);
+$display("get1 acked");
+    acks[1] <= True;
+    if (dataWire.wget() matches tagged Valid .it) return it;
+    else if (data matches tagged Valid .it) return it;
+    else begin
+      $display("this shouldn't happen");
+      return ?;
+    end
+  endmethod
+
+  method ActionValue#(t) get2() if ((isValid(data) || isValid(dataWire.wget())) && !acks[2]);
+$display("get2 acked");
+    acks[2] <= True;
+    if (dataWire.wget() matches tagged Valid .it) return it;
+    else if (data matches tagged Valid .it) return it;
+    else begin
+      $display("this shouldn't happen");
+      return ?;
+    end
+  endmethod
+
+  method ActionValue#(t) get3() if ((isValid(data) || isValid(dataWire.wget())) && !acks[3]);
+$display("get3 acked");
+    acks[3] <= True;
     if (dataWire.wget() matches tagged Valid .it) return it;
     else if (data matches tagged Valid .it) return it;
     else begin
@@ -52,43 +89,4 @@ module mkCDB(CommonDataBus#(t, nlisteners)) provisos (Add#(1,a__,nlisteners), Bi
   method Action put(t entry) if (!isValid(data));
     dataWire.wset(entry);
   endmethod
-endmodule
-
-module mkTestCDB(Empty);
-  CommonDataBus#(Bit#(8), 3) cdb <- mkCDB();
-
-  Stmt test =
-  seq
-    $display("start CDB test");
-    cdb.put(22);
-    await(cdb.hasData());
-    par
-      action let v <- cdb.get(0); if (v != 22) $display("expect to get 22, got ", v); endaction
-      action let v <- cdb.get(1); if (v != 22) $display("expect to get 22, got ", v); endaction
-      action let v <- cdb.get(2); if (v != 22) $display("expect to get 22, got ", v); endaction
-    endpar
-    await(!cdb.hasData());
-    cdb.put(52);
-    await(cdb.hasData());
-    par
-      action let v <- cdb.get(0); if (v != 52) $display("expect to get 52"); endaction
-      action let v <- cdb.get(2); if (v != 52) $display("expect to get 52"); endaction
-      seq repeat (6) noAction; action let v <- cdb.get(1); if (v != 52) $display("expect to get 52"); endaction endseq
-      seq repeat (4) noAction; action let v <- cdb.get(2); endaction endseq
-    endpar
-    await(!cdb.hasData());
-    cdb.put(32);
-    await(cdb.hasData());
-    seq
-      action let v <- cdb.get(0); if (v != 32) $display("expect to get 32"); endaction
-      action let v <- cdb.get(1); if (v != 32) $display("expect to get 32"); endaction
-      action let v <- cdb.get(2); if (v != 32) $display("expect to get 32"); endaction
-      action let v <- cdb.get(2); endaction
-    endseq
-    await(!cdb.hasData());
-    $display("end CDB test (2 instances of 'cannot ack for an id twice' == pass)");
-  endseq;
-
-  mkAutoFSM(test);
-
 endmodule

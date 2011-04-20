@@ -2,6 +2,7 @@ import ClientServer::*;
 import GetPut::*;
 //import GetPutExt::*;
 import FIFO::*;
+import FShow::*;
 import FIFOF::*;
 import SpecialFIFOs::*;
 
@@ -54,6 +55,7 @@ module mkALU( ALU );
             tagged OR   .it:  ans = x | y;
             tagged XOR  .it:  ans = x ^ y;
             tagged NOR  .it:  ans = ~(x | y);
+            tagged LUI  .it:  ans = x << 32'd16;
             // branch and jump operations calculate the next_pc
             // branch operations
             tagged BLEZ .it:  if (signedLE(x, 0))  next_pc = pc_plus4 + (y << 2);
@@ -77,6 +79,7 @@ module mkALU( ALU );
         endcase
 
         let resp = ALUResp{op:req.op, data:ans, tag:req.tag, pc: req.pc, next_pc: next_pc, epoch: req.epoch};
+$display("Computed ALU op: ",fshow(req.op));
         respQ.enq(resp);
     endrule
 

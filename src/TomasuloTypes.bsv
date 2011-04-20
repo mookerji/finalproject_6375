@@ -3,6 +3,7 @@
 //----------------------------------------------------------------------
 
 import ProcTypes::*;
+import FShow::*;
 
 typedef union tagged {
               void Valid;
@@ -36,7 +37,7 @@ typedef struct {
         Maybe#(Data) data;
         Addr pc;
         Maybe#(Addr) mispredict;
-        Rindx dest;
+        WBReg dest;
         Epoch epoch;
         } ROBEntry deriving (Bits, Eq);
 
@@ -45,6 +46,11 @@ typedef struct {
         ROBTag tag;
         Epoch epoch;
         } CDBPacket deriving (Bits, Eq);    
+
+typedef union tagged {
+  Rindx ArchReg;
+  CP0indx SpecReg;
+} WBReg deriving (Bits, Eq);
 
 typedef union tagged
 {
@@ -83,6 +89,40 @@ typedef union tagged
   void        ILLEGAL;
 
 } InstrExt deriving (Bits, Eq);
+
+instance FShow#(InstrExt);
+  function Fmt fshow (InstrExt op);
+    case (op) matches
+      tagged LW .it: return fshow("LW");
+      tagged SW .it: return fshow("SW");
+      tagged ADD .it: return fshow("ADD");
+      tagged SUB .it: return fshow("SUB");
+      tagged SLT .it: return fshow("SLT");
+      tagged SLTU .it: return fshow("SLTU");
+      tagged AND .it: return fshow("AND");
+      tagged OR .it: return fshow("OR");
+      tagged XOR .it: return fshow("XOR");
+      tagged NOR .it: return fshow("NOR");
+      tagged LUI .it: return fshow("LUI");
+      tagged SLL .it: return fshow("SLL");
+      tagged SRL .it: return fshow("SRL");
+      tagged SRA .it: return fshow("SRA");
+      tagged J .it: return fshow("J");
+      tagged JAL .it: return fshow("JAL");
+      tagged JR .it: return fshow("JR");
+      tagged JALR .it: return fshow("JALR");
+      tagged BEQ .it: return fshow("BEQ");
+      tagged BNE .it: return fshow("BNE");
+      tagged BLEZ .it: return fshow("BLEZ");
+      tagged BGTZ .it: return fshow("BGTZ");
+      tagged BLTZ .it: return fshow("BLTZ");
+      tagged BGEZ .it: return fshow("BGEZ");
+      tagged MFC0 .it: return fshow("MFC0");
+      tagged MTC0 .it: return fshow("MTC0");
+      tagged ILLEGAL .it: return fshow("ILLEGAL");
+    endcase
+  endfunction
+endinstance
 
 typedef struct {
     InstrExt  op;
@@ -183,35 +223,35 @@ endfunction
 
 
 // return instruction destination
-function Rindx instr_dest(Instr inst);
+function WBReg instr_dest(Instr inst);
     case ( inst ) matches
-        tagged LW    .it :        return (it.rdst);
-        tagged ADDIU .it :        return (it.rdst);
-        tagged SLTI  .it :        return (it.rdst);
-        tagged SLTIU .it :        return (it.rdst);
-        tagged ANDI  .it :        return (it.rdst);
-        tagged ORI   .it :        return (it.rdst);
-        tagged XORI  .it :        return (it.rdst);
-        tagged LUI   .it :        return (it.rdst);
-        tagged SLL   .it :        return (it.rdst);
-        tagged SRL   .it :        return (it.rdst);
-        tagged SRA   .it :        return (it.rdst);
-        tagged SLLV  .it :        return (it.rdst);
-        tagged SRLV  .it :        return (it.rdst);
-        tagged SRAV  .it :        return (it.rdst);
-        tagged ADDU  .it :        return (it.rdst);
-        tagged SUBU  .it :        return (it.rdst);
-        tagged AND   .it :        return (it.rdst);
-        tagged OR    .it :        return (it.rdst);
-        tagged XOR   .it :        return (it.rdst);
-        tagged NOR   .it :        return (it.rdst);
-        tagged SLT   .it :        return (it.rdst);
-        tagged SLTU  .it :        return (it.rdst);
-        tagged JAL   .it :        return (31);
-        tagged JALR  .it :        return (it.rdst);
-        tagged MFC0  .it :        return (it.rdst);
-        tagged MTC0  .it :        return (it.cop0dst);
-        default :                 return 0;
+        tagged LW    .it :        return tagged ArchReg (it.rdst);
+        tagged ADDIU .it :        return tagged ArchReg (it.rdst);
+        tagged SLTI  .it :        return tagged ArchReg (it.rdst);
+        tagged SLTIU .it :        return tagged ArchReg (it.rdst);
+        tagged ANDI  .it :        return tagged ArchReg (it.rdst);
+        tagged ORI   .it :        return tagged ArchReg (it.rdst);
+        tagged XORI  .it :        return tagged ArchReg (it.rdst);
+        tagged LUI   .it :        return tagged ArchReg (it.rdst);
+        tagged SLL   .it :        return tagged ArchReg (it.rdst);
+        tagged SRL   .it :        return tagged ArchReg (it.rdst);
+        tagged SRA   .it :        return tagged ArchReg (it.rdst);
+        tagged SLLV  .it :        return tagged ArchReg (it.rdst);
+        tagged SRLV  .it :        return tagged ArchReg (it.rdst);
+        tagged SRAV  .it :        return tagged ArchReg (it.rdst);
+        tagged ADDU  .it :        return tagged ArchReg (it.rdst);
+        tagged SUBU  .it :        return tagged ArchReg (it.rdst);
+        tagged AND   .it :        return tagged ArchReg (it.rdst);
+        tagged OR    .it :        return tagged ArchReg (it.rdst);
+        tagged XOR   .it :        return tagged ArchReg (it.rdst);
+        tagged NOR   .it :        return tagged ArchReg (it.rdst);
+        tagged SLT   .it :        return tagged ArchReg (it.rdst);
+        tagged SLTU  .it :        return tagged ArchReg (it.rdst);
+        tagged JAL   .it :        return tagged ArchReg (31);
+        tagged JALR  .it :        return tagged ArchReg (it.rdst);
+        tagged MFC0  .it :        return tagged ArchReg (it.rdst);
+        tagged MTC0  .it :        return tagged SpecReg (it.cop0dst);
+        default :                 return tagged ArchReg 0;
     endcase
 endfunction     
 
