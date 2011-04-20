@@ -78,7 +78,7 @@ typedef union tagged
   struct { } BGEZ;
 
   struct { } MFC0;
-  struct { } MTC0;
+  struct { CP0indx cop0dst; } MTC0;
 
   void        ILLEGAL;
 
@@ -103,7 +103,7 @@ typedef struct {
 } ALUResp deriving(Eq,Bits);                
 
 // operation types/classes
-typedef enum {ALU_OP, MEM_OP, JB_OP} Op_type deriving(Eq);
+typedef enum {ALU_OP, MEM_OP, JB_OP, MTC0_OP} Op_type deriving(Eq);
 
 // determine instruction type from instruction tag
 function Op_type instr_type( Instr inst );
@@ -142,7 +142,7 @@ function Op_type instr_type( Instr inst );
         tagged BLTZ  .it : return JB_OP;
         tagged BGEZ  .it : return JB_OP;
         tagged MFC0  .it : return ALU_OP;
-        tagged MTC0  .it : return ALU_OP;
+        tagged MTC0  .it : return ALU_OP; // handle this separately
         tagged ILLEGAL   : return ?;
         default          : return ?;
     endcase
