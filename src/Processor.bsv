@@ -517,10 +517,10 @@ $display("finished store");
 	$display("alu_compl for alu tag: %d", ans.tag);
         CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:ans.epoch};
         cdb.put(cdb_ans);
-        if (instr_ext_type(ans.op) == JB_OP) begin
+        if (instr_ext_type(ans.op) == JB_OP && ans.epoch == predictor.currentEpoch()) begin
             $display("alu_compl for jb tag: %d", ans.tag);
             let next_pc = ans.next_pc;
-            if (next_pc != predictor.confirmPredict(ans.pc) && ans.epoch == predictor.currentEpoch()) begin
+            if (next_pc != predictor.confirmPredict(ans.pc)) begin
                 rob.updatePrediction(ans.tag, next_pc);
             end
         end

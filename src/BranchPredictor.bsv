@@ -1,4 +1,5 @@
 import Vector::*;
+import ConfigReg::*;
 import ProcTypes::*;
 
 //-----------------------------------------------------------

@@ -1,6 +1,7 @@
 import Vector::*;
 import TomasuloTypes::*;
 import CommonDataBus::*;
+import FShow::*;
 
 interface ReservationStation;
   method ActionValue#(RSEntry) getReadyEntry();
@@ -10,6 +11,15 @@ endinterface
 module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rsifc);
 
   Vector#(2, Reg#(Maybe#(RSEntry))) entries <- replicateM(mkReg(tagged Invalid));
+
+  rule fucklife;
+    for (Integer i = 0; i < 2; i = i + 1) begin
+      case (entries[i]) matches
+        tagged Valid .e: $display("Reservation Station contains entry ",fshow(e.op)," [",fshow(e.op1),", ",fshow(e.op2),"]");
+        tagged Invalid: $display("Reservation Station contains no entry");
+      endcase
+    end
+  endrule
 
   rule cdb_recv;
     let packet <- cdb.get2();
