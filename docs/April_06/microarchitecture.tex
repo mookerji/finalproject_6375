@@ -337,10 +337,9 @@ Arithmetic operations are performed on \verb=op1= and \verb=op2= to yield
 
 \subsection{Pipeline Stage Behavior\label{sec:stages}}
 The rules in \verb=Processor.bsv= implement an elastic pipeline intermediated
-by the container modules described in Section~\ref{sec:modules}. This section
-will eventually be updated to include branch prediction handling and stalling
-logic, and might accidentally omit memory operations. Some pseudocode details
-are lifted from~\cite{99KMP}.
+by the container modules described in Section~\ref{sec:modules}. Branch
+prediction handling and stalling logic are included, but omitted from the
+pseudocode. Some pseudocode notation are lifted from~\cite{99KMP}.
 \begin{enumerate}
     \item \textbf{Instruction Fetch}. During instruction fetch, the instruction is fetched and enqueued, and the
 \verb=pcQ= is enqueued with the current epoch and program. This is implemented
