@@ -533,6 +533,14 @@ Currently, we execute around 40 instructions, including several branches and
 loops before running into issues in the qsort benchmark. We can pass around
 15\% of the asm testbench.
 
+    \section{Preliminary Synthesis Results}
+
+    We have synthesized our current design to gain some understanding of the timing and
+    LUT usage of the system. Currently, the design is can be synthesized at 58MHz.
+    The critical path is through the branch target buffer's CAM, which is inefficiently
+    implemented as a linear search. We are currently using 15\% of the slice registers and 28\% of the slice LUTs,
+    so we should be able to fit our design on the FPGA.
+
     \section{Planned Design Exploration}
     
     Our first goal is to obtain functional out-of-order execution with
