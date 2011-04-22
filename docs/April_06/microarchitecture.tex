@@ -435,12 +435,7 @@ The following describes the support architectural modules implemented in our des
 
     \section{Implementation Status and Testing Plans}
 
-      We have thus far implemented the ALU, the reservation stations, the common data (bypass) bus,
-      the reorder buffer, and all of the system types. The common data bus and the reorder buffer have
-      been unit tested for correctness. The branch predictor and memory subsystem have been ported,
-      and the majority of Tomasulo's algorithm has been implemented. The load/store system must be
-      still be implemented, and branch predictor and operand source search function must be tested.
-      All 1322 lines of code compile without error.
+    We have implemented every component of the processor. We have begun to debug the system. Currently, we execute around 40 instructions, including several branches and loops before running into issues. We can pass around 15\% of the asm testbench.
 
     \section{Planned Design Exploration}
     
