@@ -4,8 +4,8 @@ import Vector::*;
 
 interface CommonDataBus#(type t);
   method Action put(t entry);
-  method ActionValue#(t) get0();
-  method ActionValue#(t) get1();
+  method ActionValue#(Maybe#(t)) get0();
+  method ActionValue#(Maybe#(t)) get1();
   method ActionValue#(t) get2();
   method ActionValue#(t) get3();
   method Bool hasData();
@@ -43,25 +43,23 @@ $display("all acked");
     return isValid(data);
   endmethod
 
-  method ActionValue#(t) get0() if ((isValid(data) || isValid(dataWire.wget())) && !acks[0]);
+  method ActionValue#(Maybe#(t)) get0() if (!acks[0]);
 $display("get0 acked");
     acks[0] <= True;
-    if (dataWire.wget() matches tagged Valid .it) return it;
-    else if (data matches tagged Valid .it) return it;
+    if (dataWire.wget() matches tagged Valid .it) return tagged Valid it;
+    else if (data matches tagged Valid .it) return tagged Valid it;
     else begin
-      $display("this shouldn't happen");
-      return ?;
+      return tagged Invalid;
     end
   endmethod
 
-  method ActionValue#(t) get1() if ((isValid(data) || isValid(dataWire.wget())) && !acks[1]);
+  method ActionValue#(Maybe#(t)) get1() if (!acks[1]);
 $display("get1 acked");
     acks[1] <= True;
-    if (dataWire.wget() matches tagged Valid .it) return it;
-    else if (data matches tagged Valid .it) return it;
+    if (dataWire.wget() matches tagged Valid .it) return tagged Valid it;
+    else if (data matches tagged Valid .it) return tagged Valid it;
     else begin
-      $display("this shouldn't happen");
-      return ?;
+      return tagged Invalid;
     end
   endmethod
 

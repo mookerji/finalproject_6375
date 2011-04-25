@@ -12,6 +12,7 @@ module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rs
 
   Vector#(2, Reg#(Maybe#(RSEntry))) entries <- replicateM(mkReg(tagged Invalid));
 
+/*
   rule fucklife;
     for (Integer i = 0; i < 2; i = i + 1) begin
       case (entries[i]) matches
@@ -20,9 +21,21 @@ module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rs
       endcase
     end
   endrule
+*/
+
+  rule allfull(isValid(entries[0]) && isValid(entries[1]));
+    $display("oscar the grouch lives in a trashcan");
+  endrule
 
   rule cdb_recv;
     let packet <- cdb.get2();
+    $display("Reservation station got packet ",fshow(packet));
+    for (Integer i = 0; i < 2; i = i + 1) begin
+      case (entries[i]) matches
+        tagged Valid .e: $display("Reservation Station contains entry ",fshow(e.op)," [",fshow(e.op1),", ",fshow(e.op2),"]");
+        tagged Invalid: $display("Reservation Station contains no entry");
+      endcase
+    end
     let tag = packet.tag;
     if (isValid(packet.data)) begin
       let oper = tagged Imm fromMaybe(?, packet.data);
@@ -32,13 +45,16 @@ module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rs
           Bool modified = False;
           if (entry.op1 matches tagged Tag .it &&& it == tag) begin
              entry.op1 = oper;
-            modified = True;
+             modified = True;
           end
           if (entry.op2 matches tagged Tag .it &&& it == tag) begin
             entry.op2 = oper;
             modified = True;
           end
-          if (modified) entries[i] <= tagged Valid entry;
+          if (modified) begin
+            $display("Reservation Station got packet which updated an entry");
+            entries[i] <= tagged Valid entry;
+          end
         end
       end
     end
@@ -67,10 +83,11 @@ module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rs
     return index;
   endfunction
 
-  method ActionValue#(RSEntry) getReadyEntry() if (isValid(readyEntry()));
-    let i = fromMaybe(?, readyEntry());
+  method ActionValue#(RSEntry) getReadyEntry() if (readyEntry() matches tagged Valid .i);
+    let e = fromMaybe(?, entries[i]);
     entries[i] <= tagged Invalid;
-    return fromMaybe(?, entries[i]);
+    $display("Got ready entry ",fshow(e.op)," [",fshow(e.op1),", ",fshow(e.op2),"]");
+    return e;
   endmethod
 
   method Action put(RSEntry entry) if (isValid(freeSlot()));

@@ -12,6 +12,15 @@ typedef union tagged {
 
 typedef Bit#(6) OpCode;
 
+instance FShow#(RenameEntry);
+  function Fmt fshow (RenameEntry op);
+    case (op) matches
+      tagged Valid: return $format("Valid");
+      tagged Tag .it: return $format("Tag %d", it);
+    endcase
+  endfunction
+endinstance
+
 // *** Register file should probably just contain a unified
 //      data type with ROBTags/Data. Why do we have a 
 //      separate rename map again? Operands should be
@@ -26,6 +35,44 @@ instance FShow#(Operand);
     case (op) matches
       tagged Tag .it: return $format("Tag %d", it);
       tagged Imm .it: return $format("Imm %d", it);
+    endcase
+  endfunction
+endinstance
+
+instance FShow#(Rindx);
+  function Fmt fshow (Rindx rindx);
+    case (rindx) matches
+      0: return $format("$zero");
+      1: return $format("$at");
+      2: return $format("$v0");
+      3: return $format("$v1");
+      4: return $format("$a0");
+      5: return $format("$a1");
+      6: return $format("$a2");
+      7: return $format("$a3");
+      8: return $format("$t0");
+      9: return $format("$t1");
+      10: return $format("$t2");
+      11: return $format("$t3");
+      12: return $format("$t4");
+      13: return $format("$t5");
+      14: return $format("$t6");
+      15: return $format("$t7");
+      24: return $format("$t8");
+      25: return $format("$t9");
+      16: return $format("$s0");
+      17: return $format("$s1");
+      18: return $format("$s2");
+      19: return $format("$s3");
+      20: return $format("$s4");
+      21: return $format("$s5");
+      22: return $format("$s6");
+      23: return $format("$s7");
+      26: return $format("$k0");
+      27: return $format("$k1");
+      28: return $format("$gp");
+      29: return $format("$sp");
+      31: return $format("$ra");
     endcase
   endfunction
 endinstance
@@ -55,6 +102,15 @@ typedef struct {
         ROBTag tag;
         Epoch epoch;
         } CDBPacket deriving (Bits, Eq);    
+
+instance FShow#(CDBPacket);
+  function Fmt fshow (CDBPacket cdbp);
+    if (cdbp.data matches tagged Valid .data)
+      return $format("CDBPacket{ data: %d, tag: %d, epoch: %d", data, cdbp.tag, cdbp.epoch);
+    else
+      return $format("CDBPacket{ data: invalid, tag: %d, epoch: %d", cdbp.tag, cdbp.epoch);
+  endfunction
+endinstance
 
 typedef union tagged {
   Rindx ArchReg;

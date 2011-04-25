@@ -152,41 +152,45 @@ module  mkProc( Proc );
     function ActionValue#(Operand) resolveOperand(Rindx src, 
                                                     function RenameEntry renameRead(Rindx r), 
                                                     function Data rfRead(Rindx r), 
-                                                    ActionValue#(CDBPacket) cdb_data_av);
+                                                    ActionValue#(Maybe#(CDBPacket)) cdb_data_av);
         return
             actionvalue
+$display("vvv Start resolving operand vvv");
                 Operand operand = ?;
                 
                 // grab mapped register
                 let rename_reg = renameRead(src);
+$display("Looked up ",fshow(src), " in rename map, value is ", fshow(rename_reg));
                 
                 // set reservation station operands
                 case (rename_reg) matches 
-                    // if register has valid datam, use it 
+                    // if register has valid data, use it 
                     tagged Valid: begin
-                        operand = tagged Imm rfRead(src);
-                    end 
+                        let tmp = rfRead(src);
+                        operand = tagged Imm tmp;
+$display("Register is valid in architectural map, value is %d",tmp);
+                    end
                     tagged Tag .rob_tag: begin
-                        // if common data bus has bypassed rob data, use it   
-                        if (cdb.hasData()) begin
-                            let cdb_data <- cdb_data_av;
-                            if (cdb_data.tag == rob_tag) begin
-                                operand = tagged Imm fromMaybe(2222, cdb_data.data);
-                            end
-                        
+                        // if common data bus has bypassed rob data, use it
+                        Maybe#(CDBPacket) cdb_data <- cdb_data_av;
+                        if (cdb_data matches tagged Valid .cdbp &&& cdbp.tag == rob_tag) begin
+$display("CDB has packet ",fshow(cdbp));
+                            operand = tagged Imm fromMaybe(2222, cdbp.data);
                         // if the rob has tagged data and data is valid, use it
                         end else if (rob.get(rob_tag) matches tagged Valid .rob_entry 
                                         &&& isValid(rob_entry.data)) begin
                             operand = tagged Imm fromMaybe(2222, rob_entry.data);
-                        
+$display("ROB has valid tagged data %d",fromMaybe(2222,rob_entry.data));
                         // if nowhere has it, invalidate the operand
                         end else begin 
                             operand = tagged Tag rob_tag;
+$display("ROB's data is pending with tag %d",rob_tag);
                         end
                     end 
                     default:
                         $display( " RTL-ERROR : %m resolveOperand: Invalid oper_indx!" );
                 endcase
+$display("^^^ Finish resolving operand ^^^");
                 return operand;
             endactionvalue;
     endfunction 
@@ -255,6 +259,7 @@ $display("issuing SW");
             // Rindx rsrc;  Rindx rdst;  Simm imm;
             tagged ADDIU .it : begin
                 rs_entry.op = tagged ADD {};
+                rs_entry.op1 <- resolveOperand0(it.rsrc);
                 rs_entry.op2 = tagged Imm sext(it.imm);
             end
             tagged SLTI  .it : begin
@@ -451,7 +456,7 @@ $display("issuing SW");
         if (instr_type(firstInst()) != MEM_OP) begin
             // reserve reorder buffer entry
             rs_entry.tag <- rob.reserve(firstInstEpoch(), firstInstPc(), instr_dest(firstInst()));
-            $write(fshow(rs_entry.op), " [", fshow(rs_entry.op1), ", ", fshow(rs_entry.op2), "] ");
+            $write("Dispatch: ", fshow(rs_entry.op), " [", fshow(rs_entry.op1), ", ", fshow(rs_entry.op2), "] ");
 	    $display(" decode_issue tag: %d @ pc=%h", rs_entry.tag, firstInstPc());
 
             // update reservation station by instruction type
@@ -466,7 +471,8 @@ $display("issuing SW");
             // update rename table
             if (instr_dest(firstInst()) matches tagged ArchReg .areg) begin
                 rename.wr(areg, tagged Tag rs_entry.tag);
-                $display("register %d is now found in ROB entry %d",areg,rs_entry.tag);
+                $write("register ", fshow(areg));
+                $display(" is now found in ROB entry %d",rs_entry.tag);
             end
         end
     endrule
@@ -537,9 +543,9 @@ $display("finished store");
         ROBEntry head = rob.getLast();
         if(head.dest matches tagged ArchReg .areg &&& rename.rd1(areg) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag()) begin
            rename.wr(areg, tagged Valid);
-$display("flushed rename map entry for register %d",areg);
+$display("flushed rename map entry for register ",fshow(areg));
         end
-$display("purge happened");
+$display("purged instruction @ %h",rob.getLast().pc);
         rob.complete();
     endrule
     
@@ -564,15 +570,15 @@ $display("purge happened");
         // check type for rename
         if(head.dest matches tagged ArchReg .areg &&& rename.rd1(areg) matches tagged Tag .ren_tag &&& ren_tag == rob.getLastTag()) begin
            rename.wr(areg, tagged Valid);
-$display("flushed rename map entry for register %d",areg);
+$display("flushed rename map entry for register ",fshow(areg));
         end
 
         //if mispredict
         if (head.mispredict matches tagged Valid .dst) begin
             predictor.mispredict(head.pc, dst);
-$display("committed mispredict");
+$display("committed mispredict src: %h dst: %h",head.pc,dst);
         end
-$display("graduation happened");
+$display("graduation happened (pc=%h)",head.pc);
         // retire from the reorder buffer
         rob.complete();
     endrule

@@ -81,7 +81,8 @@ module mkALU( ALU );
         endcase
 
         let resp = ALUResp{op:req.op, data:ans, tag:req.tag, pc: req.pc, next_pc: next_pc, epoch: req.epoch};
-$display("Computed ALU op: ",fshow(req.op));
+$write("Computed ALU op: ",fshow(req.op));
+$display(" [%d, %d] result=%d @ pc=%h, epoch=%d",x,y,ans,req.pc,req.epoch);
         respQ.enq(resp);
     endrule
 
