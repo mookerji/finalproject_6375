@@ -27,6 +27,7 @@ import FIFO::*;
 import FIFOF::*;
 import FShow::*;
 import RWire::*;
+import ConfigReg::*;
 import Vector::*;
 
 import MemTypes::*;
@@ -37,7 +38,6 @@ import SpecialFIFOs::*;
 import ALU::*;
 import TomasuloTypes::*;
 import ReorderBuffer::*;
-import CommonDataBus::*;
 import BranchPredictor::*;
 import RFile::*;
 import ReservationStation::*;
@@ -91,7 +91,7 @@ module  mkProc( Proc );
 
     // Tomasulo algorithm data structures
     //TODO: make these fifos the correct datastructure
-    CommonDataBus#(CDBPacket) cdb <- mkCDB();
+    RWire#(CDBPacket) cdb <- mkRWire();
     ROB#(16) rob <- mkReorderBuffer();
     RFile#(RenameEntry) rename <- mkRFile(tagged Valid, False);
     ReservationStation alu_rs <- mkReservationStation(cdb);
@@ -152,7 +152,7 @@ module  mkProc( Proc );
     function ActionValue#(Operand) resolveOperand(Rindx src, 
                                                     function RenameEntry renameRead(Rindx r), 
                                                     function Data rfRead(Rindx r), 
-                                                    ActionValue#(Maybe#(CDBPacket)) cdb_data_av);
+                                                    Maybe#(CDBPacket) cdb_data);
         return
             actionvalue
 $display("vvv Start resolving operand vvv");
@@ -172,7 +172,6 @@ $display("Register is valid in architectural map, value is %d",tmp);
                     end
                     tagged Tag .rob_tag: begin
                         // if common data bus has bypassed rob data, use it
-                        Maybe#(CDBPacket) cdb_data <- cdb_data_av;
                         if (cdb_data matches tagged Valid .cdbp &&& cdbp.tag == rob_tag) begin
 $display("CDB has packet ",fshow(cdbp));
                             operand = tagged Imm fromMaybe(2222, cdbp.data);
@@ -196,16 +195,14 @@ $display("^^^ Finish resolving operand ^^^");
     endfunction 
     
     function ActionValue#(Operand) resolveOperand0(Rindx src);
-      let cdb_data_av = cdb.get0();
-      return resolveOperand(src, rename.rd1, rf.rd1, cdb_data_av);
+      return resolveOperand(src, rename.rd1, rf.rd1, cdb.wget());
     endfunction
  
     function ActionValue#(Operand) resolveOperand1(Rindx src);
-      let cdb_data_av = cdb.get1();
-      return resolveOperand(src, rename.rd2, rf.rd2, cdb_data_av);
+      return resolveOperand(src, rename.rd2, rf.rd2, cdb.wget());
     endfunction
 
-    Reg#(Bool) mem_in_flight <- mkReg(False);
+    Reg#(Bool) mem_in_flight <- mkConfigReg(False);
  
     function Bool decode_issue_valid();
         case (firstInst()) matches
@@ -522,7 +519,7 @@ $display("finished store");
         // generate cdb packet and put on bus
 	$display("alu_compl for alu tag: %d", ans.tag);
         CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:ans.epoch};
-        cdb.put(cdb_ans);
+        cdb.wset(cdb_ans);
         if (instr_ext_type(ans.op) == JB_OP && ans.epoch == predictor.currentEpoch()) begin
             $display("alu_compl for jb tag: %d", ans.tag);
             let next_pc = ans.next_pc;
@@ -532,8 +529,7 @@ $display("finished store");
         end
     endrule
 
-    rule cdb_rob_bypass;
-        let packet <- cdb.get3();
+    rule cdb_rob_bypass(cdb.wget() matches tagged Valid .packet);
         $display("cdb_rob_bypass tag: %d", packet.tag);
         if (packet.data matches tagged Valid .it &&& packet.epoch == predictor.currentEpoch())
           rob.updateData(packet.tag, it);
@@ -574,7 +570,7 @@ $display("flushed rename map entry for register ",fshow(areg));
         end
 
         //if mispredict
-        if (head.mispredict matches tagged Valid .dst) begin
+        if (rob.getLastMispredict() matches tagged Valid .dst) begin
             predictor.mispredict(head.pc, dst);
 $display("committed mispredict src: %h dst: %h",head.pc,dst);
         end

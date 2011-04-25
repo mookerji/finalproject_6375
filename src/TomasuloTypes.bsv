@@ -92,7 +92,6 @@ typedef struct {
 typedef struct {
         Maybe#(Data) data;
         Addr pc;
-        Maybe#(Addr) mispredict;
         WBReg dest;
         Epoch epoch;
         } ROBEntry deriving (Bits, Eq);

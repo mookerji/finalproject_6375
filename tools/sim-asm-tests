@@ -12,7 +12,7 @@ for x in ../data/smips*.S.vmh
 do
     ./$dut > out.txt 2> err.txt&
     echo -n $x...
-    sleep 1
+    sleep 3
     ./tb $x | grep \*
     sleep 1
 done

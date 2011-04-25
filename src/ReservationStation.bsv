@@ -1,16 +1,16 @@
 import Vector::*;
 import TomasuloTypes::*;
-import CommonDataBus::*;
 import FShow::*;
+import ConfigReg::*;
 
 interface ReservationStation;
   method ActionValue#(RSEntry) getReadyEntry();
   method Action put(RSEntry entry);
 endinterface
 
-module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rsifc);
+module mkReservationStation(RWire#(CDBPacket) cdb, ReservationStation rsifc);
 
-  Vector#(2, Reg#(Maybe#(RSEntry))) entries <- replicateM(mkReg(tagged Invalid));
+  Vector#(2, Reg#(Maybe#(RSEntry))) entries <- replicateM(mkConfigReg(tagged Invalid));
 
 /*
   rule fucklife;
@@ -27,8 +27,7 @@ module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rs
     $display("oscar the grouch lives in a trashcan");
   endrule
 
-  rule cdb_recv;
-    let packet <- cdb.get2();
+  rule cdb_recv(cdb.wget() matches tagged Valid .packet);
     $display("Reservation station got packet ",fshow(packet));
     for (Integer i = 0; i < 2; i = i + 1) begin
       case (entries[i]) matches

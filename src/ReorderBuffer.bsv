@@ -10,6 +10,7 @@ interface ROB#(numeric type robsize);
   method Action updateData(Bit#(TLog#(robsize)) tag, Data data);
   method Maybe#(ROBEntry) get(Bit#(TLog#(robsize)) tag);
   method ROBEntry getLast();
+  method Maybe#(Addr) getLastMispredict();
   method Bit#(TLog#(robsize)) getLastTag();
   method Action complete();
   method Bool isEmpty();
@@ -18,9 +19,10 @@ endinterface
 
 //16 entry ROB
 module mkReorderBuffer(ROB#(robsize));
-  ROBEntry defaultEntry = ROBEntry { pc: 0, data:tagged Invalid, mispredict:tagged Invalid, dest:tagged ArchReg 0, epoch:0 };
+  ROBEntry defaultEntry = ROBEntry { pc: 0, data:tagged Invalid, dest:tagged ArchReg 0, epoch:0 };
 
-  Vector#(robsize, Reg#(Maybe#(ROBEntry))) entries <- replicateM(mkReg(tagged Invalid));
+  Vector#(robsize, Reg#(Maybe#(ROBEntry))) entries <- replicateM(mkConfigReg(tagged Invalid));
+  Vector#(robsize, Reg#(Maybe#(Addr))) mispredictEntries <- replicateM(mkConfigReg(tagged Invalid));
   Reg#(Bit#(TLog#(robsize))) addPtr <- mkReg(0);
   Reg#(Bit#(TLog#(robsize))) removePtr <- mkReg(0);
 
@@ -42,13 +44,13 @@ module mkReorderBuffer(ROB#(robsize));
     let entry = ROBEntry {
       data: tagged Invalid,
       pc: pc,
-      mispredict: tagged Invalid,
       dest: dest,
       epoch: epoch
     };
 $display("reserved a rob entry for pc %h",pc);
     let tag = addPtr;
     entries[tag] <= tagged Valid entry;
+    mispredictEntries[tag] <= tagged Invalid;
     addPtr <= tag + 1;
     return tag;
   endmethod
@@ -58,7 +60,7 @@ $display("reserved a rob entry for pc %h",pc);
       $display("fuck this shit data");
       for (Integer i = 0; i < valueof(robsize); i = i+1) begin
         if (entries[i] matches tagged Valid .ent) begin
-            $display("tag:%d, data:%d, mispred:%d, dest:%d, pc:%d, epoch:%d", fromInteger(i), fromMaybe(22,ent.data), fromMaybe(222222,ent.mispredict), ent.dest, ent.pc, ent.epoch);
+            $display("tag:%d, data:%d, mispred:%d, dest:%d, pc:%d, epoch:%d", fromInteger(i), fromMaybe(22,ent.data), fromMaybe(222222,mispredictEntries[i]), ent.dest, ent.pc, ent.epoch);
         end else begin
             $display("%d invalid", valueof(robsize));
         end
@@ -68,6 +70,7 @@ $display("reserved a rob entry for pc %h",pc);
     let entry = fromMaybe(?, entries[tag]);
     entry.data = tagged Valid data;
     entries[tag] <= tagged Valid entry;
+    $display("updated rob entry tag %d with data %d",tag, data);
   endmethod
 
   method Action updatePrediction(Bit#(TLog#(robsize)) tag, Addr mispredict);
@@ -75,16 +78,15 @@ $display("reserved a rob entry for pc %h",pc);
       $display("fuck this shit mispredict");
       for (Integer i = 0; i < valueof(robsize); i = i+1) begin
         if (entries[i] matches tagged Valid .ent) begin
-            $display("tag:%d, data:%d, mispred:%d, dest:%d, pc:%d, epoch:%d", fromInteger(i), fromMaybe(22,ent.data), fromMaybe(222222,ent.mispredict), ent.dest, ent.pc, ent.epoch);
+            $display("tag:%d, data:%d, mispred:%d, dest:%d, pc:%d, epoch:%d", fromInteger(i), fromMaybe(22,ent.data), fromMaybe(222222, mispredictEntries[i]), ent.dest, ent.pc, ent.epoch);
         end else begin
             $display("%d invalid", valueof(robsize));
         end
       end
       $finish; 
     end
-    let entry = fromMaybe(?, entries[tag]);
-    entry.mispredict = tagged Valid mispredict;
-    entries[tag] <= tagged Valid entry;
+    mispredictEntries[tag] <= tagged Valid mispredict;
+    $display("updated rob entry tag %d with misprediction %h",tag, mispredict);
   endmethod
 
   method Maybe#(ROBEntry) get(Bit#(TLog#(robsize)) tag);
@@ -93,6 +95,10 @@ $display("reserved a rob entry for pc %h",pc);
 
   method ROBEntry getLast() if (isValid(entries[removePtr]));
     return fromMaybe(defaultEntry, entries[removePtr]);
+  endmethod
+
+  method Maybe#(Addr) getLastMispredict() if (isValid(entries[removePtr]));
+    return mispredictEntries[removePtr];
   endmethod
 
   method Bit#(TLog#(robsize)) getLastTag() if (isValid(entries[removePtr]));
@@ -112,7 +118,7 @@ module mkROBTest(Empty);
   ROB#(16) rob <- mkReorderBuffer();
 
   function makeROBE(Epoch epoch);
-    return ROBEntry { pc: 0, data:tagged Invalid, mispredict:tagged Invalid, dest:tagged ArchReg 0, epoch:epoch };
+    return ROBEntry { pc: 0, data:tagged Invalid, dest:tagged ArchReg 0, epoch:epoch };
   endfunction
 
   Reg#(Bit#(4)) tag1 <- mkReg(10);
