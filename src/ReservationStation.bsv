@@ -1,14 +1,14 @@
 import Vector::*;
 import TomasuloTypes::*;
-import CommonDataBus::*;
 import FShow::*;
+import ReorderBuffer::*;
 
 interface ReservationStation;
   method ActionValue#(RSEntry) getReadyEntry();
   method Action put(RSEntry entry);
 endinterface
 
-module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rsifc);
+module mkReservationStation(ROB#(16) rob, ReservationStation rsifc);
 
   Vector#(2, Reg#(Maybe#(RSEntry))) entries <- replicateM(mkReg(tagged Invalid));
 
@@ -27,37 +27,33 @@ module mkReservationStation(CommonDataBus#(CDBPacket) cdb, ReservationStation rs
     $display("oscar the grouch lives in a trashcan");
   endrule
 
-  rule cdb_recv;
-    let packet <- cdb.get2();
-    $display("Reservation station got packet ",fshow(packet));
+  rule check_for_completion_of_dependencies;
+$display("RS Check start");
     for (Integer i = 0; i < 2; i = i + 1) begin
-      case (entries[i]) matches
-        tagged Valid .e: $display("Reservation Station contains entry ",fshow(e.op)," [",fshow(e.op1),", ",fshow(e.op2),"]");
-        tagged Invalid: $display("Reservation Station contains no entry");
-      endcase
-    end
-    let tag = packet.tag;
-    if (isValid(packet.data)) begin
-      let oper = tagged Imm fromMaybe(?, packet.data);
-      for (Integer i = 0; i < 2; i = i + 1) begin
-        if (isValid(entries[i])) begin
-          let entry = fromMaybe(?, entries[i]);
-          Bool modified = False;
-          if (entry.op1 matches tagged Tag .it &&& it == tag) begin
-             entry.op1 = oper;
-             modified = True;
-          end
-          if (entry.op2 matches tagged Tag .it &&& it == tag) begin
-            entry.op2 = oper;
-            modified = True;
-          end
-          if (modified) begin
-            $display("Reservation Station got packet which updated an entry");
-            entries[i] <= tagged Valid entry;
-          end
+      if (isValid(entries[i])) begin
+        let entry = fromMaybe(?, entries[i]);
+        Bool modified = False;
+$display("Looking for ",fshow(entry.op1));
+if (entry.op1 matches tagged Tag .it) $display("data for the above tag in the ROB is ",rob.get(it));
+        if (entry.op1 matches tagged Tag .it &&& rob.get(it) matches tagged Valid .robent &&&
+            robent.data matches tagged Valid .robdata) begin
+           entry.op1 = tagged Imm robdata;
+           modified = True;
+        end
+$display("Looking for ",fshow(entry.op2));
+if (entry.op2 matches tagged Tag .it) $display("data for the above tag in the ROB is ",rob.get(it));
+        if (entry.op2 matches tagged Tag .it &&& rob.get(it) matches tagged Valid .robent &&&
+            robent.data matches tagged Valid .robdata) begin
+           entry.op2 = tagged Imm robdata;
+           modified = True;
+        end
+        if (modified) begin
+          $display("Reservation Station found ROB update which updated an RSEntry");
+          entries[i] <= tagged Valid entry;
         end
       end
     end
+$display("RS Check end");
   endrule
 
   function Maybe#(UInt#(TLog#(2))) readyEntry();

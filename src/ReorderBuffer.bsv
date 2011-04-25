@@ -6,8 +6,7 @@ import ConfigReg::*;
 
 interface ROB#(numeric type robsize);
   method ActionValue#(Bit#(TLog#(robsize))) reserve(Epoch epoch, Addr pc, WBReg dest);
-  method Action updatePrediction(Bit#(TLog#(robsize)) tag, Addr mispredict);
-  method Action updateData(Bit#(TLog#(robsize)) tag, Data data);
+  method Action update(Bit#(TLog#(robsize)) tag, Maybe#(Addr) mispredict, Data data);
   method Maybe#(ROBEntry) get(Bit#(TLog#(robsize)) tag);
   method ROBEntry getLast();
   method Bit#(TLog#(robsize)) getLastTag();
@@ -53,24 +52,7 @@ $display("reserved a rob entry for pc %h",pc);
     return tag;
   endmethod
 
-  method Action updateData(Bit#(TLog#(robsize)) tag, Data data);
-    if (!isValid(entries[tag])) begin
-      $display("fuck this shit data");
-      for (Integer i = 0; i < valueof(robsize); i = i+1) begin
-        if (entries[i] matches tagged Valid .ent) begin
-            $display("tag:%d, data:%d, mispred:%d, dest:%d, pc:%d, epoch:%d", fromInteger(i), fromMaybe(22,ent.data), fromMaybe(222222,ent.mispredict), ent.dest, ent.pc, ent.epoch);
-        end else begin
-            $display("%d invalid", valueof(robsize));
-        end
-      end
-      $finish; 
-    end
-    let entry = fromMaybe(?, entries[tag]);
-    entry.data = tagged Valid data;
-    entries[tag] <= tagged Valid entry;
-  endmethod
-
-  method Action updatePrediction(Bit#(TLog#(robsize)) tag, Addr mispredict);
+  method Action update(Bit#(TLog#(robsize)) tag, Maybe#(Addr) mispredict, Data data);
     if (!isValid(entries[tag])) begin
       $display("fuck this shit mispredict");
       for (Integer i = 0; i < valueof(robsize); i = i+1) begin
@@ -83,7 +65,8 @@ $display("reserved a rob entry for pc %h",pc);
       $finish; 
     end
     let entry = fromMaybe(?, entries[tag]);
-    entry.mispredict = tagged Valid mispredict;
+    entry.mispredict = mispredict;
+    entry.data = tagged Valid data;
     entries[tag] <= tagged Valid entry;
   endmethod
 

@@ -37,7 +37,6 @@ import SpecialFIFOs::*;
 import ALU::*;
 import TomasuloTypes::*;
 import ReorderBuffer::*;
-import CommonDataBus::*;
 import BranchPredictor::*;
 import RFile::*;
 import ReservationStation::*;
@@ -91,10 +90,9 @@ module  mkProc( Proc );
 
     // Tomasulo algorithm data structures
     //TODO: make these fifos the correct datastructure
-    CommonDataBus#(CDBPacket) cdb <- mkCDB();
     ROB#(16) rob <- mkReorderBuffer();
     RFile#(RenameEntry) rename <- mkRFile(tagged Valid, False);
-    ReservationStation alu_rs <- mkReservationStation(cdb);
+    ReservationStation alu_rs <- mkReservationStation(rob);
     
     // plug and play execution unit
     ALU alu_exec <- mkALU();
@@ -151,8 +149,7 @@ module  mkProc( Proc );
     // resolveOperand resolves an RSEntry Operand using an instructions src Rindx
     function ActionValue#(Operand) resolveOperand(Rindx src, 
                                                     function RenameEntry renameRead(Rindx r), 
-                                                    function Data rfRead(Rindx r), 
-                                                    ActionValue#(Maybe#(CDBPacket)) cdb_data_av);
+                                                    function Data rfRead(Rindx r));
         return
             actionvalue
 $display("vvv Start resolving operand vvv");
@@ -171,13 +168,8 @@ $display("Looked up ",fshow(src), " in rename map, value is ", fshow(rename_reg)
 $display("Register is valid in architectural map, value is %d",tmp);
                     end
                     tagged Tag .rob_tag: begin
-                        // if common data bus has bypassed rob data, use it
-                        Maybe#(CDBPacket) cdb_data <- cdb_data_av;
-                        if (cdb_data matches tagged Valid .cdbp &&& cdbp.tag == rob_tag) begin
-$display("CDB has packet ",fshow(cdbp));
-                            operand = tagged Imm fromMaybe(2222, cdbp.data);
-                        // if the rob has tagged data and data is valid, use it
-                        end else if (rob.get(rob_tag) matches tagged Valid .rob_entry 
+                        // if rob has valid data
+                        if (rob.get(rob_tag) matches tagged Valid .rob_entry 
                                         &&& isValid(rob_entry.data)) begin
                             operand = tagged Imm fromMaybe(2222, rob_entry.data);
 $display("ROB has valid tagged data %d",fromMaybe(2222,rob_entry.data));
@@ -196,13 +188,11 @@ $display("^^^ Finish resolving operand ^^^");
     endfunction 
     
     function ActionValue#(Operand) resolveOperand0(Rindx src);
-      let cdb_data_av = cdb.get0();
-      return resolveOperand(src, rename.rd1, rf.rd1, cdb_data_av);
+      return resolveOperand(src, rename.rd1, rf.rd1);
     endfunction
  
     function ActionValue#(Operand) resolveOperand1(Rindx src);
-      let cdb_data_av = cdb.get1();
-      return resolveOperand(src, rename.rd2, rf.rd2, cdb_data_av);
+      return resolveOperand(src, rename.rd2, rf.rd2);
     endfunction
 
     Reg#(Bool) mem_in_flight <- mkReg(False);
@@ -516,27 +506,19 @@ $display("finished store");
         traceTiny("mkProc", "compl","C");
         let ans = aluRespQ.first();
         aluRespQ.deq();
-	
 
         // update ROB 
-        // generate cdb packet and put on bus
-	$display("alu_compl for alu tag: %d", ans.tag);
-        CDBPacket cdb_ans = CDBPacket{data: tagged Valid ans.data, tag:ans.tag, epoch:ans.epoch};
-        cdb.put(cdb_ans);
-        if (instr_ext_type(ans.op) == JB_OP && ans.epoch == predictor.currentEpoch()) begin
-            $display("alu_compl for jb tag: %d", ans.tag);
-            let next_pc = ans.next_pc;
-            if (next_pc != predictor.confirmPredict(ans.pc)) begin
-                rob.updatePrediction(ans.tag, next_pc);
-            end
+        if (ans.epoch == predictor.currentEpoch()) begin
+          if (ans.next_pc != predictor.confirmPredict(ans.pc)) begin
+            $display("alu_compl mispredicted. tag: %d, pc: %h, next_pc: %h", ans.tag, ans.pc, ans.next_pc);
+            rob.update(ans.tag, tagged Valid ans.next_pc, ans.data);
+          end else begin
+	    $display("alu_compl for tag: %d, pc: %h", ans.tag, ans.pc);
+            rob.update(ans.tag, tagged Invalid, ans.data);
+          end
+        end else begin
+          $display("discarding useless result from pc %h",ans.pc);
         end
-    endrule
-
-    rule cdb_rob_bypass;
-        let packet <- cdb.get3();
-        $display("cdb_rob_bypass tag: %d", packet.tag);
-        if (packet.data matches tagged Valid .it &&& packet.epoch == predictor.currentEpoch())
-          rob.updateData(packet.tag, it);
     endrule
 
     rule purge (rob.getLast().epoch != predictor.currentEpoch());
