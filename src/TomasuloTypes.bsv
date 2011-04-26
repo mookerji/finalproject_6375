@@ -103,6 +103,12 @@ typedef struct {
         Epoch epoch;
         } CDBPacket deriving (Bits, Eq);    
 
+instance FShow#(Data);
+  function Fmt fshow (Data data);
+    return $format("%d",data);
+  endfunction
+endinstance
+
 instance FShow#(CDBPacket);
   function Fmt fshow (CDBPacket cdbp);
     if (cdbp.data matches tagged Valid .data)

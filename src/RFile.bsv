@@ -15,7 +15,7 @@ endinterface
 
 module mkRFile#(t defaultValue, Bool bypass)(RFile#(t) rfifc ) provisos (Bits#(t,__a));
     RegFile#(Rindx,t) rfile <- mkRegFileWCF(0, 31);
-    //TODO: dirty hack, fuck the lack of documentation of how to preload a reg file
+    //TODO: dirty hack
     Vector#(32,ConfigReg#(Bool)) writtenYet <- replicateM(mkConfigReg(False));
     RWire#(Rindx) indxWire <- mkRWire();
     RWire#(t) dataWire <- mkRWire();

@@ -13,7 +13,7 @@ module mkReservationStation(ROB#(16) rob, ReservationStation rsifc);
   Vector#(2, Reg#(Maybe#(RSEntry))) entries <- replicateM(mkReg(tagged Invalid));
 
 /*
-  rule fucklife;
+  rule test;
     for (Integer i = 0; i < 2; i = i + 1) begin
       case (entries[i]) matches
         tagged Valid .e: $display("Reservation Station contains entry ",fshow(e.op)," [",fshow(e.op1),", ",fshow(e.op2),"]");
@@ -24,24 +24,33 @@ module mkReservationStation(ROB#(16) rob, ReservationStation rsifc);
 */
 
   rule allfull(isValid(entries[0]) && isValid(entries[1]));
-    $display("oscar the grouch lives in a trashcan");
+    $display("Reservation Station is full");
   endrule
 
   rule check_for_completion_of_dependencies;
-$display("RS Check start");
     for (Integer i = 0; i < 2; i = i + 1) begin
       if (isValid(entries[i])) begin
         let entry = fromMaybe(?, entries[i]);
         Bool modified = False;
 $display("Looking for ",fshow(entry.op1));
-if (entry.op1 matches tagged Tag .it) $display("data for the above tag in the ROB is ",rob.get(it));
+if (entry.op1 matches tagged Tag .it) begin
+  let robDataStr = fshow("[No ROB Entry]");
+  if (rob.get(it) matches tagged Valid .robent)
+    robDataStr = fshow(robent.data);
+  $display("data for the above tag in the ROB is ",robDataStr);
+end
         if (entry.op1 matches tagged Tag .it &&& rob.get(it) matches tagged Valid .robent &&&
             robent.data matches tagged Valid .robdata) begin
            entry.op1 = tagged Imm robdata;
            modified = True;
         end
 $display("Looking for ",fshow(entry.op2));
-if (entry.op2 matches tagged Tag .it) $display("data for the above tag in the ROB is ",rob.get(it));
+if (entry.op2 matches tagged Tag .it) begin
+  let robDataStr = fshow("[No ROB Entry]");
+  if (rob.get(it) matches tagged Valid .robent)
+    robDataStr = fshow(robent.data);
+  $display("data for the above tag in the ROB is ",robDataStr);
+end
         if (entry.op2 matches tagged Tag .it &&& rob.get(it) matches tagged Valid .robent &&&
             robent.data matches tagged Valid .robdata) begin
            entry.op2 = tagged Imm robdata;
@@ -53,7 +62,6 @@ if (entry.op2 matches tagged Tag .it) $display("data for the above tag in the RO
         end
       end
     end
-$display("RS Check end");
   endrule
 
   function Maybe#(UInt#(TLog#(2))) readyEntry();
@@ -82,12 +90,12 @@ $display("RS Check end");
   method ActionValue#(RSEntry) getReadyEntry() if (readyEntry() matches tagged Valid .i);
     let e = fromMaybe(?, entries[i]);
     entries[i] <= tagged Invalid;
-    $display("Got ready entry ",fshow(e.op)," [",fshow(e.op1),", ",fshow(e.op2),"]");
+    $display($format("Got ready entry [%d] ",i),fshow(e.op)," [",fshow(e.op1),", ",fshow(e.op2),"]");
     return e;
   endmethod
 
-  method Action put(RSEntry entry) if (isValid(freeSlot()));
-    let i = fromMaybe(?, readyEntry());
+  method Action put(RSEntry entry) if (freeSlot() matches tagged Valid .i);
+    $display("Inserting new entry into slot %d",i);
     entries[i] <= tagged Valid entry;
   endmethod
 endmodule

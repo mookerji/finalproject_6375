@@ -54,7 +54,7 @@ $display("reserved a rob entry for pc %h",pc);
 
   method Action update(Bit#(TLog#(robsize)) tag, Maybe#(Addr) mispredict, Data data);
     if (!isValid(entries[tag])) begin
-      $display("fuck this shit mispredict");
+      $write("attempted to update invalid ROBEntry: ");
       for (Integer i = 0; i < valueof(robsize); i = i+1) begin
         if (entries[i] matches tagged Valid .ent) begin
             $display("tag:%d, data:%d, mispred:%d, dest:%d, pc:%d, epoch:%d", fromInteger(i), fromMaybe(22,ent.data), fromMaybe(222222,ent.mispredict), ent.dest, ent.pc, ent.epoch);
