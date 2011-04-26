@@ -199,16 +199,16 @@ $display("^^^ Finish resolving operand ^^^");
  
     function Bool decode_issue_valid();
         case (firstInst()) matches
-            tagged LW .it: return rob.isEmpty() && !mem_in_flight;
-            tagged SW .it: return rob.isEmpty() && !mem_in_flight;
-            default: return !rob.isFull() && !mem_in_flight;
+            tagged LW .it: return rob.isEmpty();
+            tagged SW .it: return rob.isEmpty();
+            default: return !rob.isFull();
         endcase
     endfunction
     
     // this stage decodes instructions, packs them into RSEntries, checks three sources 
     //  for instruction operands using setRSEntry_src{1,2}, enqueues them
     //  in the ReservationStation, and updates the reorder buffer.
-    rule decode_issue (decode_issue_valid());
+    rule decode_issue (decode_issue_valid() && !mem_in_flight);
         traceTiny("mkProc", "decode_issue","I");
         
         // grab instruction
@@ -488,14 +488,14 @@ $display("issuing SW");
         aluReqQ.enq(req);
     endrule
 
-    rule mem_graduate_ld (dataRespQ.first() matches tagged LoadResp .ld);
+    rule mem_graduate_ld (dataRespQ.first() matches tagged LoadResp .ld &&& mem_in_flight);
 $display("finished load");
         dataRespQ.deq();
         rf.wr( truncate(ld.tag), ld.data );
         mem_in_flight <= False;
     endrule
     
-    rule mem_graduate_st (dataRespQ.first() matches tagged StoreResp .st);
+    rule mem_graduate_st (dataRespQ.first() matches tagged StoreResp .st &&& mem_in_flight);
 $display("finished store");
         dataRespQ.deq();
         mem_in_flight <= False;
