@@ -1,6 +1,7 @@
 import Vector::*;
 import TomasuloTypes::*;
 import FShow::*;
+import ConfigReg::*;
 import ReorderBuffer::*;
 
 interface ReservationStation;
@@ -9,8 +10,11 @@ interface ReservationStation;
 endinterface
 
 module mkReservationStation(ROB#(16) rob, ReservationStation rsifc);
-
-  Vector#(2, Reg#(Maybe#(RSEntry))) entries <- replicateM(mkReg(tagged Invalid));
+//this must be a configreg because we want dispatch_alu, check_completion, and decode_issue to fire simultaneously
+//the check_completion rule must fire every cycle or else we could lose writeback results in the ROB
+//this should be rewritten to use RWires and a regular reg, where those functions write to wires and the rule writes to the reg
+//but the configreg is correct too
+  Vector#(2, Reg#(Maybe#(RSEntry))) entries <- replicateM(mkConfigReg(tagged Invalid));
 
 /*
   rule test;
